@@ -1,13 +1,16 @@
+import { useEffect, useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import DecryptedText from '../reactbits/DecryptedText';
 import Aurora from '../reactbits/Aurora';
 import ClickSpark from '../reactbits/ClickSpark';
 import type { DeskSnapshot, Isolation, Mode } from '../data/types';
 import type { Which } from '../useDesk';
-import { PALETTE, money, wallClock } from './format';
+import { PALETTE, age, freshness, money, wallClock } from './format';
 import { FALSE_BLOCK, FOLLOWED } from '../data/book';
 
 interface Props {
   snapshot: DeskSnapshot;
+  selected: string;
   which: Which;
   mode: Mode;
   isolation: Isolation;
@@ -20,12 +23,32 @@ interface Props {
 }
 
 /**
- * The title decodes in, which is the deck's own device rather than a borrowed one: the
- * slides lock blanks and random letters left to right with no sliding or glow. Aurora
+ * Ages tick every second rather than every poll, because an age that sits still for two
+ * seconds and then jumps reads as a stale screen, which is the one impression this demo
+ * cannot afford to give.
+ */
+function useNow(): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+  return now;
+}
+
+/**
+ * The title decodes in, which is the deck's own device rather than a borrowed one. Aurora
  * sits behind it at low opacity, standing in for the cover's shader.
  */
 export function Masthead(p: Props) {
   const s = p.snapshot;
+  const now = useNow();
+  const live = s.mode === 'streamhouse';
+  // Live rows carry real timestamps, so their ages are measured against real time. The
+  // simulator keeps its own trading day, so its ages are measured against that.
+  const base = s.origin === 'confluent' ? now : s.wallClock;
+  const story = new Set([FOLLOWED, FALSE_BLOCK]);
+
   return (
     <header className="mast">
       <div className="mast-glow" aria-hidden="true">
@@ -54,10 +77,10 @@ export function Masthead(p: Props) {
           />
         </h1>
         <div className="wall">
-          <span className="lbl">Trading day / wall clock</span>
-          <span className="wall-time num">{wallClock(s.wallClock)}</span>
+          <span className="lbl">Wall clock</span>
+          <span className="wall-time num">{wallClock(now)}</span>
           <span className="lbl">
-            Client {s.served.clientId} / limit {money(s.served.limitUsd)}
+            Following {p.selected} / limit {money(s.served.limitUsd)}
           </span>
         </div>
       </div>
@@ -82,17 +105,18 @@ export function Masthead(p: Props) {
             </button>
           </div>
 
-          <div className="seg" role="group" aria-label="Client">
+          <div className="seg" role="group" aria-label="The two clients in the story">
             <button
               type="button"
-              aria-pressed={s.served.clientId === FOLLOWED}
+              aria-pressed={p.selected === FOLLOWED}
               onClick={() => p.onClient(FOLLOWED)}
+              title="The breach: its stale number reads low"
             >
               {FOLLOWED}
             </button>
             <button
               type="button"
-              aria-pressed={s.served.clientId === FALSE_BLOCK}
+              aria-pressed={p.selected === FALSE_BLOCK}
               onClick={() => p.onClient(FALSE_BLOCK)}
               title="The false block: its stale number reads high, so a good trade gets refused"
             >
@@ -116,6 +140,46 @@ export function Masthead(p: Props) {
           </span>
         </div>
       </ClickSpark>
+
+      {live && s.active.length ? (
+        <div className="live-strip" role="group" aria-label="Clients who just traded">
+          <span className="lbl">Just traded</span>
+          <div className="ticks">
+            <AnimatePresence initial={false} mode="popLayout">
+              {s.active.slice(0, 6).map((c) => {
+                const a = Math.max(0, base - c.asOf);
+                return (
+                  <motion.button
+                    layout
+                    type="button"
+                    key={c.clientId}
+                    className="tick"
+                    aria-pressed={p.selected === c.clientId}
+                    onClick={() => p.onClient(c.clientId)}
+                    title={`Follow client ${c.clientId}`}
+                    initial={{ opacity: 0, x: -14 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 14 }}
+                    transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+                  >
+                    <span className="tick-id num">{c.clientId}</span>
+                    <span className="tick-age num" data-tone={freshness(a)}>
+                      {age(a)}
+                    </span>
+                    <span className="tick-util num">{c.limitUtilPct.toFixed(0)}%</span>
+                  </motion.button>
+                );
+              })}
+            </AnimatePresence>
+          </div>
+          {story.has(p.selected) ? (
+            <span className="strip-note">
+              {p.selected} trades only when you make it. Pick someone who just traded to show
+              an answer seconds old.
+            </span>
+          ) : null}
+        </div>
+      ) : null}
     </header>
   );
 }

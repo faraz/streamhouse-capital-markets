@@ -214,6 +214,26 @@ export function runContract(h: Harness): void {
     });
   });
 
+  describe(`${h.name}: someone has always just traded`, () => {
+    it('offers recently traded clients, freshest first', async () => {
+      const { source } = await setup();
+      const { active } = await source.snapshot(FOLLOWED);
+      expect(active.length).toBeGreaterThan(0);
+      for (let i = 1; i < active.length; i++) {
+        expect(active[i - 1]!.asOf).toBeGreaterThanOrEqual(active[i]!.asOf);
+      }
+    });
+
+    it('answers for a client it has never heard of rather than failing', async () => {
+      // After a fall back mid-demo the screen may ask about a live client the simulator
+      // does not know. A blank screen is worse than an answer for the followed client.
+      const { source } = await setup();
+      const s = await source.snapshot('99999');
+      expect(s.served.clientId).toBeTruthy();
+      expect(Number.isFinite(s.served.exposureUsd)).toBe(true);
+    });
+  });
+
   describe(`${h.name}: honesty`, () => {
     it('always states which implementation answered', async () => {
       const { source } = await setup();

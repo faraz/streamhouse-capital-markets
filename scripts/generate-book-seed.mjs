@@ -1,20 +1,31 @@
-// Emits the chunked Flink statements that seed the book to its full size.
+// Emits the chunked Flink statements that seed the book.
 //
-// Chunked because one INSERT ... VALUES with four thousand rows is roughly 200KB of SQL.
-// Bounded sources, so each statement completes rather than running forever.
+// Client ids are CONTIGUOUS, 10000 upward. That is what lets the live trade generator
+// reach any client: Datagen cannot hold thousands of ids in an options list (its schema
+// string caps at 10,000 characters), but it can draw an integer from a range.
 //
-// Generated utilisation is capped below the deck's lowest client, so the eight clients
-// the talk names always sit at the top of the sorted book, and below the escalation
-// threshold, so nothing crosses a line without a narrative event.
-import { writeFileSync, mkdirSync } from 'node:fs';
-import { DECK_CLIENTS } from '../src/data/book.ts';
+// Limits are seeded for the whole range; opening balances for only the first part of it.
+// The rest have a limit but no position, so each one enters the book the first time it
+// trades. That is how the book visibly grows while the demo runs, rather than sitting at
+// a fixed size waiting for someone to look at it.
+//
+// The deck's eight clients are four-digit ids, outside this range, so the generator never
+// touches them and they keep the figures the talk states.
+//
+//   node scripts/generate-book-seed.mjs [limits] [balances]
+import { writeFileSync, mkdirSync, rmSync } from 'node:fs';
 
-const TOTAL = Number(process.argv[2] ?? 4000);
+const LIMITS = Number(process.argv[2] ?? 8000);
+const BALANCES = Number(process.argv[3] ?? 4000);
+const FIRST_ID = 10000;
 const CHUNK = 1000;
 const OPEN_TS = "TIMESTAMP '2026-11-09 08:00:00'";
 const PRICE = 5412.25;
+// Capped below the deck's lowest client (5560 at 67.5%), so the eight the talk names
+// always head the sorted book, and below the escalation threshold, so nothing crosses a
+// line without a narrative event.
 const UTIL_MIN = 8;
-const UTIL_MAX = 66; // 5560, the deck's lowest, sits at 67.5
+const UTIL_MAX = 66;
 
 function mulberry32(seed) {
   let a = seed >>> 0;
@@ -27,41 +38,44 @@ function mulberry32(seed) {
 }
 
 const rnd = mulberry32(4417);
-const taken = new Set(DECK_CLIENTS.map((c) => c.id));
-const rows = [];
-while (rows.length + DECK_CLIENTS.length < TOTAL) {
-  const id = String(10000 + Math.floor(rnd() * 89999));
-  if (taken.has(id)) continue;
-  taken.add(id);
+const clients = Array.from({ length: LIMITS }, (_, i) => {
   const limitUsd = Math.round((20 + rnd() * 480) * 1e6);
   const util = UTIL_MIN + rnd() * (UTIL_MAX - UTIL_MIN);
-  const exposureUsd = (limitUsd * util) / 100;
-  rows.push({ id, limitUsd, exposureUsd });
+  return { id: String(FIRST_ID + i), limitUsd, exposureUsd: (limitUsd * util) / 100 };
+});
+
+const out = new URL('../flink/generated/', import.meta.url);
+rmSync(out, { recursive: true, force: true });
+mkdirSync(out, { recursive: true });
+
+let nl = 0;
+for (let i = 0; i < clients.length; i += CHUNK) {
+  nl++;
+  const slice = clients.slice(i, i + CHUNK);
+  writeFileSync(
+    new URL(`book-limits-${nl}.sql`, out),
+    'INSERT INTO client_limits VALUES\n' +
+      slice.map((c) => `  ('${c.id}', ${c.limitUsd.toFixed(1)})`).join(',\n') + ';\n',
+  );
 }
 
-mkdirSync(new URL('../flink/generated/', import.meta.url), { recursive: true });
-let n = 0;
-for (let i = 0; i < rows.length; i += CHUNK) {
-  const slice = rows.slice(i, i + CHUNK);
-  n++;
-
+let nb = 0;
+const funded = clients.slice(0, BALANCES);
+for (let i = 0; i < funded.length; i += CHUNK) {
+  nb++;
+  const slice = funded.slice(i, i + CHUNK);
   writeFileSync(
-    new URL(`../flink/generated/book-limits-${n}.sql`, import.meta.url),
-    `INSERT INTO client_limits VALUES\n` +
-      slice.map((r) => `  ('${r.id}', ${r.limitUsd.toFixed(1)})`).join(',\n') + ';\n',
-  );
-
-  writeFileSync(
-    new URL(`../flink/generated/book-positions-${n}.sql`, import.meta.url),
-    `INSERT INTO positions VALUES\n` +
+    new URL(`book-positions-${nb}.sql`, out),
+    'INSERT INTO positions VALUES\n' +
       slice
-        .map((r) => {
-          const qty = Math.max(1, Math.round(r.exposureUsd / PRICE));
-          return `  ('${r.id}','OPEN',${qty},${PRICE},${r.exposureUsd.toFixed(1)},${OPEN_TS},'opening_balance',0)`;
+        .map((c) => {
+          const qty = Math.max(1, Math.round(c.exposureUsd / PRICE));
+          return `  ('${c.id}','OPEN',${qty},${PRICE},${c.exposureUsd.toFixed(1)},${OPEN_TS},'opening_balance',0)`;
         })
         .join(',\n') + ';\n',
   );
 }
 
-console.log(`${rows.length} generated clients + ${DECK_CLIENTS.length} from the deck = ${rows.length + DECK_CLIENTS.length}`);
-console.log(`${n} chunks of up to ${CHUNK}`);
+console.log(`limits for ${LIMITS} clients (${FIRST_ID}-${FIRST_ID + LIMITS - 1}) in ${nl} chunks`);
+console.log(`opening balances for ${BALANCES} of them in ${nb} chunks`);
+console.log(`the other ${LIMITS - BALANCES} enter the book as they first trade`);

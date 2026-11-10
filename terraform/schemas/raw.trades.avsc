@@ -1,0 +1,10 @@
+{
+  "type": "record", "name": "Trade", "namespace": "demo.raw",
+  "doc": "The live trade feed that keeps the book moving. acct is an integer so a generator can draw any client from a range.",
+  "fields": [
+    { "name": "acct", "type": "int" },
+    { "name": "sym", "type": "string" },
+    { "name": "qty", "type": "int" },
+    { "name": "px", "type": "double" }
+  ]
+}

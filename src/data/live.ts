@@ -165,7 +165,9 @@ export class LiveSource implements ExposureSource {
     }));
 
     return {
-      wallClock: OPENING_MS + t,
+      // Real time: the served rows carry real timestamps, and an age is only right
+      // when it is measured against the same clock they were stamped with.
+      wallClock: Date.now(),
       mode: this.mode,
       isolation: this.isolation,
       sources,
@@ -184,6 +186,14 @@ export class LiveSource implements ExposureSource {
         asOf: b.asOfMs,
         lastSource: 'book_of_record.changes',
       })),
+      active: (wire.active ?? []).map((b) => ({
+        clientId: b.clientId,
+        exposureUsd: b.exposureUsd,
+        limitUsd: b.limitUsd,
+        limitUtilPct: b.limitUtilPct,
+        asOf: b.asOfMs,
+        lastSource: 'trade',
+      })),
       recent,
       escalations,
       clocks: {
@@ -201,6 +211,7 @@ export interface WireSnapshot {
   served: { exposureUsd: number; limitUsd: number; limitUtilPct: number; asOfMs: number };
   trueExposureUsd: number;
   book: Array<{ clientId: string; exposureUsd: number; limitUsd: number; limitUtilPct: number; asOfMs: number }>;
+  active: Array<{ clientId: string; exposureUsd: number; limitUsd: number; limitUtilPct: number; asOfMs: number }>;
   recent: Array<{ clientId: string; symbol: string; quantity: number; price: number; eventTimeMs: number; source: string }>;
   rejected: { raw: string; reason: string } | null;
   escalations: Array<{ atMs: number; who: string; what: string; tone: 'warn' | 'bad' }>;

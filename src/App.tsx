@@ -25,6 +25,7 @@ export default function App() {
     <div className="wrap">
       <Masthead
         snapshot={s}
+        selected={desk.client}
         which={desk.which}
         mode={desk.mode}
         isolation={desk.isolation}

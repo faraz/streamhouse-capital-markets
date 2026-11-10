@@ -3,7 +3,6 @@ import { AnimatePresence, motion } from 'motion/react';
 import SpotlightCard from '../reactbits/SpotlightCard';
 import TextType from '../reactbits/TextType';
 import type { DeskSnapshot } from '../data/types';
-import { FOLLOWED } from '../data/book';
 import { PALETTE } from './format';
 
 export interface Step {
@@ -14,10 +13,11 @@ export interface Step {
   body?: string;
 }
 
-const QUESTIONS = [
-  `What is client ${FOLLOWED}'s exposure right now, across everything?`,
+const questionsFor = (client: string) => [
+  `What is client ${client}'s exposure right now, across everything?`,
+  'Which clients just traded, and how old is each answer?',
   'Which clients are nearest their limit?',
-  `Did anything just change for ${FOLLOWED}?`,
+  `Did anything just change for ${client}?`,
 ];
 
 const GATE = import.meta.env['VITE_DEMO_GATE'] ?? 'local-dev';
@@ -37,6 +37,7 @@ export function AgentPanel({ snapshot }: { snapshot: DeskSnapshot }) {
   const [question, setQuestion] = useState('');
   const tape = useRef<HTMLDivElement>(null);
   const live = snapshot.mode === 'streamhouse';
+  const QUESTIONS = questionsFor(snapshot.served.clientId);
 
   const ask = useCallback(async (q: string) => {
     if (busy || !q.trim()) return;

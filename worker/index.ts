@@ -62,7 +62,7 @@ async function snapshot(env: Env, clientId: string): Promise<Response> {
   const id = esc(clientId);
 
   // Concurrent: the waiting is network, which the CPU budget does not count.
-  const [servedQ, bookQ, recentQ, dlqQ, srcQ] = await Promise.all([
+  const [servedQ, bookQ, recentQ, dlqQ, srcQ, activeQ] = await Promise.all([
     runQuery(c, `SELECT client_id, exposure_usd, limit_usd, limit_util_pct, as_of FROM client_exposure WHERE client_id = '${id}' LIMIT 1`),
     runQuery(c, `SELECT client_id, exposure_usd, limit_usd, limit_util_pct, as_of FROM client_exposure ORDER BY limit_util_pct DESC LIMIT ${BOOK_ROWS}`),
     runQuery(c, `SELECT client_id, symbol, quantity, price, event_time, source FROM positions WHERE client_id = '${id}' ORDER BY event_time DESC LIMIT 5`),
@@ -70,6 +70,9 @@ async function snapshot(env: Env, clientId: string): Promise<Response> {
     // Which feeds have actually produced anything. No GROUP BY on a Lightning Table, so
     // this reads the recent tail and collects the distinct sources from it.
     runQuery(c, `SELECT source FROM positions ORDER BY event_time DESC LIMIT 60`),
+    // Whoever traded most recently. Sorting a Lightning Table on a stored timestamp is the
+    // same operation as sorting the book on limit_util_pct.
+    runQuery(c, `SELECT client_id, exposure_usd, limit_usd, limit_util_pct, as_of FROM client_exposure ORDER BY as_of DESC LIMIT 8`),
   ]);
 
   const servedRow = rowsToObjects(servedQ)[0];
@@ -84,6 +87,14 @@ async function snapshot(env: Env, clientId: string): Promise<Response> {
   };
 
   const book = rowsToObjects(bookQ).map((r) => ({
+    clientId: r['CLIENT_ID'] ?? '',
+    exposureUsd: num(r['EXPOSURE_USD']),
+    limitUsd: num(r['LIMIT_USD']),
+    limitUtilPct: num(r['LIMIT_UTIL_PCT']),
+    asOfMs: tsToMs(r['AS_OF']),
+  }));
+
+  const active = rowsToObjects(activeQ).map((r) => ({
     clientId: r['CLIENT_ID'] ?? '',
     exposureUsd: num(r['EXPOSURE_USD']),
     limitUsd: num(r['LIMIT_USD']),
@@ -142,6 +153,7 @@ async function snapshot(env: Env, clientId: string): Promise<Response> {
     // absence is the point, so this is not padded to invent one.
     trueExposureUsd: served.exposureUsd,
     book,
+    active,
     recent,
     rejected,
     escalations,

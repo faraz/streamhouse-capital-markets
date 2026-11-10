@@ -138,7 +138,7 @@ export class Simulator implements ExposureSource {
       exposureUsd,
       limitUsd: base.limitUsd,
       limitUtilPct: (exposureUsd / base.limitUsd) * 100,
-      asOf: t - this.servedAge(t),
+      asOf: OPENING_MS + t - this.servedAge(t),
       lastSource: this.mode === 'before' ? 'nightly.extract' : 'book_of_record.changes',
     };
   }
@@ -211,7 +211,8 @@ export class Simulator implements ExposureSource {
     return out.sort((a, b) => b.at - a.at);
   }
 
-  async snapshot(clientId: string): Promise<DeskSnapshot> {
+  async snapshot(requested: string): Promise<DeskSnapshot> {
+    const clientId = this.byId.has(requested) ? requested : FOLLOWED;
     const t = this.clock();
     const sources = this.sourceAges(t);
     const live = this.mode === 'streamhouse';
@@ -226,7 +227,7 @@ export class Simulator implements ExposureSource {
             exposureUsd: reported,
             limitUsd: base.limitUsd,
             limitUtilPct: (reported / base.limitUsd) * 100,
-            asOf: t - this.servedAge(t),
+            asOf: OPENING_MS + t - this.servedAge(t),
             lastSource: 'nightly.extract',
           };
         })();
@@ -293,6 +294,9 @@ export class Simulator implements ExposureSource {
       served,
       trueExposureUsd: truth.exposureUsd,
       book,
+      // A handful of book clients standing in for "just traded". The simulator has no
+      // live feed; this exists so the screen has something to offer when it falls back.
+      active: book.slice(8, 14).map((c, i) => ({ ...c, asOf: OPENING_MS + t - (i + 1) * 3000 })),
       recent,
       escalations: this.escalationsFor(clientId, t),
       clocks: {

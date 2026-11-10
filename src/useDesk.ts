@@ -25,7 +25,11 @@ export function useDesk() {
   const live = useMemo(() => new LiveSource({ clock, gate: GATE, clientCount: 4000 }), [clock]);
 
   const [which, setWhich] = useState<Which>('live');
-  const [client, setClient] = useState(FOLLOWED);
+  const [client, setClientState] = useState(FOLLOWED);
+  // Follow whoever traded most recently, once, on arriving in the live world. Following
+  // the freshest client on every poll would move the screen every two seconds under the
+  // presenter's hands; following nobody would leave it on a client half an hour stale.
+  const pickFreshest = useRef(true);
   const [mode, setModeState] = useState<Mode>('streamhouse');
   const [isolation, setIsolationState] = useState<Isolation>('committed');
   const [snapshot, setSnapshot] = useState<DeskSnapshot | null>(null);
@@ -36,8 +40,14 @@ export function useDesk() {
   const refresh = useCallback(async () => {
     if (document.hidden) return;
     try {
-      setSnapshot(await source.snapshot(client));
+      const snap = await source.snapshot(client);
+      setSnapshot(snap);
       setNote(null);
+      const freshest = snap.active[0];
+      if (pickFreshest.current && snap.mode === 'streamhouse' && snap.origin === 'confluent' && freshest) {
+        pickFreshest.current = false;
+        if (freshest.clientId !== client) setClientState(freshest.clientId);
+      }
     } catch (e) {
       // Fall back for this render only, and keep trying. Latching the toggle to the
       // simulator meant one blip while the server was starting left the screen
@@ -78,8 +88,17 @@ export function useDesk() {
     mode,
     isolation,
     setWhich,
-    setClient,
-    setMode: (m: Mode) => setModeState(m),
+    setClient: (c: string) => {
+      pickFreshest.current = false;
+      setClientState(c);
+    },
+    setMode: (m: Mode) => {
+      // The before-world is simulated around the two clients the story is told with, so
+      // going there returns to them; coming back to the live world picks someone fresh.
+      if (m === 'before') setClientState(FOLLOWED);
+      else pickFreshest.current = true;
+      setModeState(m);
+    },
     setIsolation: (i: Isolation) => setIsolationState(i),
     fill: async (lots: number) => { await source.produceFill(client, lots); await refresh(); },
     fatFinger: async () => { await source.produceFatFinger(client); await refresh(); },

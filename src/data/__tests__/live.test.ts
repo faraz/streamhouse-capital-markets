@@ -40,6 +40,13 @@ function harness() {
           limitUtilPct: b.limitUtilPct,
           asOfMs: b.asOf,
         })),
+        active: s.active.map((b) => ({
+          clientId: b.clientId,
+          exposureUsd: b.exposureUsd,
+          limitUsd: b.limitUsd,
+          limitUtilPct: b.limitUtilPct,
+          asOfMs: b.asOf,
+        })),
         recent: s.recent.map((p) => ({
           clientId: p.clientId,
           symbol: p.symbol,

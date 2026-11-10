@@ -88,6 +88,12 @@ export interface DeskSnapshot {
   trueExposureUsd: number;
   /** Top N by limit utilisation, descending. Never more than 200 rows. */
   book: ClientExposure[];
+  /**
+   * Whoever traded most recently, freshest first. The demo cannot depend on two prepared
+   * clients being recent: left idle for half an hour, their answers are half an hour old
+   * and the screen contradicts its own argument. Someone has always just traded.
+   */
+  active: ClientExposure[];
   recent: Position[];
   escalations: Escalation[];
   clocks: { servedAgeMs: number; openTableAgeMs: number };

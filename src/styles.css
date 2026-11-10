@@ -542,3 +542,41 @@ input { caret-color: var(--cobalt); }
 .desk > .rail-col, .desk > .panel, .desk > .agent { height: 100%; }
 .rail-col { display: flex; flex-direction: column; }
 .esc, .book { max-height: none; overflow: visible; }
+
+/* ---------- just traded ----------
+   A ticker of whoever traded most recently. Each tick reads id, then how old that
+   client's answer is, then how much of its limit is used: the age sits in the middle
+   because it is the claim the whole demo makes. */
+.live-strip {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px;
+  padding-top: 2px;
+}
+.ticks { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.tick {
+  display: inline-grid;
+  grid-template-columns: auto auto auto;
+  align-items: baseline;
+  gap: 9px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--paper);
+  background: var(--panel);
+  border: 1px solid var(--edge);
+  border-radius: 4px;
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: border-color 140ms ease, background-color 140ms ease;
+}
+.tick:hover { border-color: rgba(143, 176, 255, 0.55); background: var(--raise); }
+.tick[aria-pressed="true"] { border-color: var(--cobalt); background: #141D42; }
+.tick-id { font-weight: 600; }
+.tick-age { font-weight: 600; min-width: 4ch; text-align: right; }
+.tick-age[data-tone="fresh"] { color: var(--mint); }
+.tick-age[data-tone="warn"] { color: var(--amber); }
+.tick-age[data-tone="stale"] { color: var(--alert); }
+.tick-util { color: var(--mist); }
+.strip-note {
+  flex-basis: 100%;
+  font-size: 12px; line-height: 1.45; color: var(--amber);
+  max-width: 70ch;
+}

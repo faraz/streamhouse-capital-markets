@@ -27751,6 +27751,7 @@ How to work:
 What you can and cannot do:
 - These tables serve one topic at a time. No joins, no GROUP BY, no aggregate functions. Filtering, ORDER BY and LIMIT all work.
 - Exposure figures already carry a limit_util_pct column and an as_of column. Use them rather than computing ratios yourself.
+- To find who traded most recently, sort client_exposure by as_of descending. The as_of on each row is when that client's figure last changed.
 
 How to answer:
 - State the figure plainly, then say how old it is: subtract the as_of value from the current time you were given, and say the age in seconds or minutes. The age of the answer matters as much as the answer.
@@ -27947,14 +27948,17 @@ var esc = /* @__PURE__ */ __name((s) => s.replace(/'/g, "''"), "esc");
 async function snapshot(env, clientId) {
   const c = cfg(env);
   const id = esc(clientId);
-  const [servedQ, bookQ, recentQ, dlqQ, srcQ] = await Promise.all([
+  const [servedQ, bookQ, recentQ, dlqQ, srcQ, activeQ] = await Promise.all([
     runQuery(c, `SELECT client_id, exposure_usd, limit_usd, limit_util_pct, as_of FROM client_exposure WHERE client_id = '${id}' LIMIT 1`),
     runQuery(c, `SELECT client_id, exposure_usd, limit_usd, limit_util_pct, as_of FROM client_exposure ORDER BY limit_util_pct DESC LIMIT ${BOOK_ROWS}`),
     runQuery(c, `SELECT client_id, symbol, quantity, price, event_time, source FROM positions WHERE client_id = '${id}' ORDER BY event_time DESC LIMIT 5`),
     runQuery(c, `SELECT client_id, quantity, reject_reason, event_time FROM positions_dlq WHERE client_id = '${id}' ORDER BY event_time DESC LIMIT 1`).catch(() => ({ columns: [], rows: [] })),
     // Which feeds have actually produced anything. No GROUP BY on a Lightning Table, so
     // this reads the recent tail and collects the distinct sources from it.
-    runQuery(c, `SELECT source FROM positions ORDER BY event_time DESC LIMIT 60`)
+    runQuery(c, `SELECT source FROM positions ORDER BY event_time DESC LIMIT 60`),
+    // Whoever traded most recently. Sorting a Lightning Table on a stored timestamp is the
+    // same operation as sorting the book on limit_util_pct.
+    runQuery(c, `SELECT client_id, exposure_usd, limit_usd, limit_util_pct, as_of FROM client_exposure ORDER BY as_of DESC LIMIT 8`)
   ]);
   const servedRow = rowsToObjects(servedQ)[0];
   if (!servedRow)
@@ -27967,6 +27971,13 @@ async function snapshot(env, clientId) {
     asOfMs
   };
   const book = rowsToObjects(bookQ).map((r) => ({
+    clientId: r["CLIENT_ID"] ?? "",
+    exposureUsd: num(r["EXPOSURE_USD"]),
+    limitUsd: num(r["LIMIT_USD"]),
+    limitUtilPct: num(r["LIMIT_UTIL_PCT"]),
+    asOfMs: tsToMs(r["AS_OF"])
+  }));
+  const active = rowsToObjects(activeQ).map((r) => ({
     clientId: r["CLIENT_ID"] ?? "",
     exposureUsd: num(r["EXPOSURE_USD"]),
     limitUsd: num(r["LIMIT_USD"]),
@@ -28010,6 +28021,7 @@ async function snapshot(env, clientId) {
     // absence is the point, so this is not padded to invent one.
     trueExposureUsd: served.exposureUsd,
     book,
+    active,
     recent,
     rejected,
     escalations,
