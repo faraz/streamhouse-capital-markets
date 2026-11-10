@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Commits name only Faraz, and the prose uses no em dashes. Both have slipped into commits
+# here, so they are checked rather than remembered. Git's own comment lines are ignored.
+msg=$(grep -v '^#' "$1")
+status=0
+if printf '%s\n' "$msg" | grep -qi '^co-authored-by:'; then
+  echo "commit-msg: remove the Co-Authored-By trailer; commits name only the author" >&2
+  status=1
+fi
+if printf '%s\n' "$msg" | grep -q '—'; then
+  echo "commit-msg: replace the em dash with a colon, comma or full stop" >&2
+  status=1
+fi
+exit "$status"

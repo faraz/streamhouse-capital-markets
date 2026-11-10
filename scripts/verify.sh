@@ -102,6 +102,22 @@ if [ "${CN:-0}" -ge 1 ]; then pass "$CN connector(s) running"; else fail "no con
 SRC=$(rows "SELECT source FROM positions ORDER BY event_time DESC LIMIT 60" | sort -u | tr '\n' ' ')
 pass "feeds seen recently: $SRC"
 
+section "Committed schemas match the registry"
+# regenerate.sh registers the raw schemas from terraform/schemas, so a file that has drifted
+# from what is registered means the repo can no longer rebuild what is running. Found once
+# only when a rebuild died on the sixth seed. Compared by field name and type, since the
+# registry rewrites the JSON around them.
+for f in terraform/schemas/raw.*.avsc; do
+  t=$(basename "$f" .avsc | sed 's/^raw\./raw_/')
+  shape='[.fields[]|{n:.name,t:(.type|if type=="object" then .type else . end)}]'
+  reg=$(curl -s --max-time 20 -u "$CONFLUENT_SR_KEY:$CONFLUENT_SR_SECRET" \
+        "$CONFLUENT_SR_ENDPOINT/subjects/${t}-value/versions/latest" | jq -c ".schema|fromjson|$shape" 2>/dev/null)
+  com=$(jq -c "$shape" "$f")
+  if [ -z "$reg" ]; then fail "$t-value is not registered"
+  elif [ "$reg" = "$com" ]; then pass "$f matches $t-value"
+  else fail "$f differs from $t-value: registered $reg"; fi
+done
+
 section "The agent's MCP endpoint"
 MCP=$(curl -s --max-time 40 -X POST "$RTCE_MCP_URL" \
   -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" \

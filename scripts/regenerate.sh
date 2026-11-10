@@ -31,12 +31,44 @@ submit() {
   local st
   st=$(confluent flink statement list "${FLAGS_ENV[@]}" -o json 2>/dev/null \
        | jq -r --arg n "cm-${label}-${STAMP}" '.[]|select(.name==$n)|.status')
+  # PENDING after --wait means the pool has no CFU left to start it, and it will sit there
+  # for good. Seen once as sixteen seeds reporting PENDING while the run carried on.
+  local waited=0
+  while [ "$st" = "PENDING" ] && [ "$waited" -lt 60 ]; do
+    sleep 10; waited=$((waited + 10))
+    st=$(confluent flink statement list "${FLAGS_ENV[@]}" -o json 2>/dev/null \
+         | jq -r --arg n "cm-${label}-${STAMP}" '.[]|select(.name==$n)|.status')
+  done
   printf '  %-22s %s\n' "$label" "${st:-NOT CREATED}"
+  if [ "$st" = "PENDING" ]; then
+    echo "  still PENDING after 60s: the compute pool is out of CFU (see the capacity check above)" >&2
+    return 1
+  fi
   [ -n "$st" ] && [ "$st" != "FAILED" ]
+}
+
+# Each running statement holds at least one CFU. This run leaves CONTINUOUS statements
+# running and needs one more slot at a time for the bounded seeds, so check the pool has
+# room before changing anything rather than finding out halfway through.
+CONTINUOUS=11
+capacity_check() {
+  local pool max cur
+  pool=$(confluent flink compute-pool describe "$DEMO_FLINK_POOL_ID" -o json)
+  max=$(printf '%s' "$pool" | jq -r '.max_cfu')
+  # The CLI spells the field with three r's; accept the corrected spelling too.
+  cur=$(printf '%s' "$pool" | jq -r '.currrent_cfu // .current_cfu // 0')
+  printf '  pool %s: %s of %s CFU in use, this run needs %s more\n' "$DEMO_FLINK_POOL_ID" "$cur" "$max" "$((CONTINUOUS + 1))"
+  if [ $((max - cur)) -lt $((CONTINUOUS + 1)) ]; then
+    echo "  not enough room: run scripts/clear.sh first, or raise flink_max_cfu in terraform/variables.tf" >&2
+    return 1
+  fi
 }
 
 confluent environment use "$DEMO_ENVIRONMENT_ID" >/dev/null 2>&1
 confluent kafka cluster use "$DEMO_CLUSTER_ID" >/dev/null 2>&1
+
+say "capacity"
+capacity_check
 
 say "raw topics"
 for t in raw_mq_intraday raw_venue raw_desk_sheet raw_custodial raw_clearing raw_book_of_record raw_events raw_trades; do
@@ -138,6 +170,32 @@ enable_lt() {
 enable_lt client_exposure "$DESC_EXPOSURE"
 enable_lt positions "$DESC_POSITIONS"
 enable_lt positions_dlq "$DESC_DLQ"
+
+say "the dead-letter table's first record"
+# A Lightning Table over a topic that has never had a record reports ACTIVE and answers
+# DP_TABLE_NOT_AVAILABLE, so without this the presenter's fat finger would be the first
+# record it ever saw. One rejected record for the verification client warms it. The screen
+# reads the dead letters only for the client it follows, so this never appears there.
+warm_dlq() {
+  local sid body code
+  sid=$(sed -n 's/^RAW_EVENTS_SCHEMA_ID=//p' .env)
+  body=$(python3 - "$sid" <<'PY2'
+import base64, json, struct, sys, datetime
+sid = int(sys.argv[1])
+ts = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d %H:%M:%S.%f')[:23]
+payload = json.dumps({"acct": "90000", "sym": "ESU6", "qty": 2400000, "px": 5412.0, "ts": ts, "kind": "setup"}).encode()
+framed = b"\x00" + struct.pack(">I", sid) + payload
+print(json.dumps({"key": {"type": "STRING", "data": "90000"},
+                  "value": {"type": "BINARY", "data": base64.b64encode(framed).decode()}}))
+PY2
+)
+  code=$(curl -s --max-time 40 -o /dev/null -w '%{http_code}' -X POST \
+    "$CONFLUENT_REST_ENDPOINT/kafka/v3/clusters/$DEMO_CLUSTER_ID/topics/raw_events/records" \
+    -H "Content-Type: application/json" -u "$CONFLUENT_KAFKA_KEY:$CONFLUENT_KAFKA_SECRET" -d "$body")
+  if [ "$code" = "200" ]; then echo "  produced one fat finger for client 90000"
+  else echo "  WARNING: could not produce the warm-up record (HTTP $code)" >&2; fi
+}
+warm_dlq
 
 if [ "$WITH_GEN" = "1" ]; then
   say "trade feeds"

@@ -8,8 +8,11 @@
     "preview": "vite preview",
     "deploy": "npm run build && wrangler deploy",
     "worker:dev": "wrangler dev",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "check": "npm run --silent typecheck && npm test --silent && bash scripts/check.sh",
+    "prepare": "git config core.hooksPath .githooks"
   },
   "devDependencies": {
     "typescript": "5.6.3",

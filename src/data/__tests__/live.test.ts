@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LiveSource, type WireSnapshot } from '../live';
 import { Simulator } from '../simulator';
 import { FOLLOWED } from '../book';
@@ -13,7 +13,7 @@ import { runContract } from './contract';
  * This is what makes drift between the simulator and the live path a failing test rather
  * than a surprise on stage. A renamed field or a seconds-for-milliseconds slip fails here.
  */
-function harness() {
+function harness(opts: { viaGlobalFetch?: boolean } = {}) {
   let now = 0;
   const clock = () => now;
   // The server's own view, standing in for Flink and the Lightning Tables.
@@ -79,6 +79,17 @@ function harness() {
     return new Response('{}', { status: 404 });
   }) as unknown as typeof fetch;
 
+  if (opts.viaGlobalFetch) {
+    // The browser's fetch, as the screen gets it: no fetchFn passed. It throws when called
+    // as a method of anything but the window, which is what a stored reference does.
+    vi.stubGlobal('fetch', function (this: unknown, ...a: Parameters<typeof fetch>) {
+      if (this !== undefined && this !== globalThis) throw new TypeError('Illegal invocation');
+      return fetchFn(...a);
+    });
+    const source = new LiveSource({ clock, clientCount: 250, baseUrl: 'http://x' });
+    return { source, advance: (ms: number) => { now += ms; } };
+  }
+
   const source = new LiveSource({ clock, fetchFn, clientCount: 250, baseUrl: 'http://x' });
   return { source, advance: (ms: number) => { now += ms; } };
 }
@@ -112,5 +123,17 @@ describe('live source: honesty about where the number came from', () => {
     await source.setMode('before');
     await source.snapshot(FOLLOWED);
     expect(calls).toBe(0);
+  });
+});
+
+describe('live source: the default fetch, as the browser runs it', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  // Every other test here injects fetchFn, so the path the screen actually takes went
+  // untested and broke in the browser while the whole suite passed.
+  it('reaches the server without an injected fetch', async () => {
+    const { source } = harness({ viaGlobalFetch: true });
+    await source.setMode('streamhouse');
+    expect((await source.snapshot(FOLLOWED)).origin).toBe('confluent');
   });
 });
