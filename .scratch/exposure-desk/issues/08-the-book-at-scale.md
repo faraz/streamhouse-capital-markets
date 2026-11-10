@@ -10,7 +10,7 @@ topic, but the column it sorts on must be stored rather than computed.
 
 **Blocked by:** 05.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] Four thousand clients have limits, seeded idempotently so re-running changes nothing
 - [ ] The deck's eight clients carry their stated limits and exposures and occupy the top of the sort

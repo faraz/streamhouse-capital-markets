@@ -24,7 +24,7 @@ allows 100,000 requests a day, so the screen polls one combined endpoint.
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] The Before-mode answer inherits the age of the stalest source, not of the freshest
 - [ ] The Before-mode answer carries no age stamp at all

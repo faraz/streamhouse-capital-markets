@@ -39,6 +39,14 @@ The continuous baseline motion that keeps the screen visibly alive. Stays inside
 so no client ever crosses a threshold without a narrative event.
 _Avoid_: noise, randomisation, drift
 
+### Who reads the number
+
+**The analyst**:
+The agent that answers a question put to it in English, by reading the served tables over
+MCP and saying how old its answer is. Acts only when asked. The inherited **risk agent**
+is the other one: it watches every client and escalates without being asked.
+_Avoid_: the risk agent (that is the watcher), chatbot, assistant, copilot
+
 ### What is shown
 
 **Beat**:

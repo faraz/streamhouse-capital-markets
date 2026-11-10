@@ -11,7 +11,7 @@ everything downstream reads one thing instead of six.
 
 **Blocked by:** 05.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] All six raw topics exist with their own registered schemas, and the schemas genuinely differ in field names, types and whether a time is present
 - [ ] The normalizing statement reconciles all six into the single record shape, converting cents to currency, parsing string quantities, and deriving an event time for the source that has none

@@ -11,7 +11,7 @@ directly.
 
 **Blocked by:** 05, 03.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] One route returns the whole screen's state in a single response
 - [ ] The live implementation satisfies the same contract suite as the simulator, with the HTTP layer stubbed by recorded responses, and drift between the two fails a test

@@ -11,7 +11,7 @@ declarative rule and the guard can be deleted, which is a clean upgrade story.
 
 **Blocked by:** 05.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] A dead letter topic exists
 - [ ] The normalizing path rejects a record whose quantity exceeds a stated bound, and writes it to the dead letter topic with enough context to see why it was rejected

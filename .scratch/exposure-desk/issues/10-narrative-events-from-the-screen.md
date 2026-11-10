@@ -10,7 +10,7 @@ topics being ungoverned by design; governance is imposed where Flink normalizes.
 
 **Blocked by:** 09, 07.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] The fill control produces a real record to a raw topic and the screen reports it as in flight
 - [ ] The screen names how long until the change reaches the served figure, and the figure then changes at that moment and not before

@@ -7,7 +7,7 @@ A destroy must remove the demo's footprint and leave both of them standing.
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] The environment and the Kafka cluster are read as data, never declared as managed resources
 - [ ] `terraform plan` succeeds using Cloud API credentials from the environment, and proposes no change to the environment or the cluster

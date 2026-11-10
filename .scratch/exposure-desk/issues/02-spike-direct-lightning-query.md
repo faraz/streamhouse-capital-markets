@@ -11,7 +11,7 @@ both from the command line and over HTTP.
 
 **Blocked by:** 01.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] A throwaway topic with a registered schema has a Lightning Table that reaches status Active
 - [ ] A query returns rows through the CLI

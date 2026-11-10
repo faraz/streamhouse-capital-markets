@@ -14,7 +14,7 @@ question and answer is request-response shaped.
 
 **Blocked by:** 05.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] The three scripted questions each return a correct answer drawn from a real query
 - [ ] The free-text box answers questions that were not scripted, grounded only in the served tables, and declines anything it cannot answer from them rather than improvising

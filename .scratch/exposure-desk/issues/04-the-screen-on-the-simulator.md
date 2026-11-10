@@ -11,7 +11,7 @@ holds no business logic of its own.
 
 **Blocked by:** 03.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] One command starts it and it works with the network disconnected
 - [ ] The Before and Streamhouse toggle flips the whole screen in one gesture

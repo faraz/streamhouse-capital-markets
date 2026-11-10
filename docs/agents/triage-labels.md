@@ -9,3 +9,4 @@ A "label" is the value of the `Status:` line near the top of an issue file.
 | `ready-for-agent` | `ready-for-agent`  | Fully specified, ready for an AFK agent  |
 | `ready-for-human` | `ready-for-human`  | Requires human implementation            |
 | `wontfix`         | `wontfix`          | Will not be actioned                     |
+| (local)           | `done`             | Built and merged; not a triage role      |

@@ -11,7 +11,7 @@ exists.
 
 **Blocked by:** 01, 02.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] One raw topic exists with a registered schema, and a fully managed generator is writing to it continuously
 - [ ] A Flink statement normalizes that source into the shared record shape, carrying a key, an event time, its source and its own age
