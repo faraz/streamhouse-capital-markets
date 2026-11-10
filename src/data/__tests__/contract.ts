@@ -150,6 +150,18 @@ export function runContract(h: Harness): void {
       const later = await source.snapshot(FOLLOWED);
       expect(later.escalations.length).toBe(1);
     });
+
+    it('names who wrote every escalation', async () => {
+      const { source, advance } = await setup();
+      await source.produceFill(FOLLOWED, DEFAULT_FILL_LOTS);
+      advance(COMMIT_MS + MATERIALIZE_MS + 1_000);
+
+      const { escalations } = await source.snapshot(FOLLOWED);
+      expect(escalations.length).toBeGreaterThan(0);
+      for (const e of escalations) {
+        expect(['risk-agent', 'threshold-check', 'simulator']).toContain(e.author);
+      }
+    });
   });
 
   describe(`${h.name}: bounded jitter`, () => {

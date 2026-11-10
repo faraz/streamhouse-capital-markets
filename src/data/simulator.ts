@@ -175,9 +175,10 @@ export class Simulator implements ExposureSource {
     if (this.mode === 'before') {
       return [{
         at: 0,
-        who: 'Found out the next morning / 08:14',
-        what: `Client ${clientId} closed yesterday at 103% of limit. The agent saw 68% all afternoon and escalated nothing.`,
+        title: 'Found out the next morning / 08:14',
+        what: `Client ${clientId} closed yesterday at 103% of limit. The risk agent saw 68% all afternoon and escalated nothing.`,
         tone: 'bad',
+        author: 'simulator',
       }];
     }
 
@@ -186,10 +187,11 @@ export class Simulator implements ExposureSource {
       if (e.kind === 'fatfinger') {
         if (this.visibleAt(e.atMs) <= t + COMMIT_MS) {
           out.push({
-            at: e.atMs,
-            who: 'Flink validation',
+            at: OPENING_MS + e.atMs,
+            title: 'Flink validation',
             what: 'A 2,400,000 lot on ESU6 was rejected to positions.dlq. The exposure figure never moved.',
             tone: 'warn',
+            author: 'simulator',
           });
         }
         continue;
@@ -200,11 +202,16 @@ export class Simulator implements ExposureSource {
       const before = this.exposureFor(e.clientId, Math.max(0, e.atMs - 1), true);
       // Exactly once per crossing: derived from the event, never accumulated.
       if (before.limitUtilPct < ESCALATE_PCT && after.limitUtilPct >= ESCALATE_PCT) {
+        // Absolute, like the served tables' as_of, so it reads as a time on the trading day.
+        const crossedAt = OPENING_MS + visible;
         out.push({
-          at: visible,
-          who: 'Escalated to the risk officer',
-          what: `Client ${e.clientId} at ${after.limitUtilPct.toFixed(1)}% of limit after a ${e.lots} lot fill. Approaching the 90% threshold.`,
+          at: crossedAt,
+          title: 'Escalated to the risk officer',
+          // A note, as the risk agent writes one: the client, when, the fill that did it,
+          // and where it stands. A fallback then changes the author, not what is said.
+          what: `Client ${e.clientId} crossed ${ESCALATE_PCT}% at ${new Date(crossedAt).toISOString().slice(11, 19)} on a ${e.lots.toLocaleString('en-US')} lot ESU6 fill; now ${after.limitUtilPct.toFixed(1)}% of a $${Math.round(after.limitUsd / 1e6)}m limit.`,
           tone: 'warn',
+          author: 'simulator',
         });
       }
     }

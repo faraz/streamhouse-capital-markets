@@ -1,13 +1,13 @@
 /**
- * The risk agent. Asked a question in English, it works out its own way to the answer
+ * The analyst. Asked a question in English, it works out its own way to the answer
  * against the served Lightning Tables and replies with the figure and how old it is.
  *
  * The engine exposes exactly three tools and there is no mechanism for a purpose-built
- * one, so the agent lists what is there, reads a schema, and writes its own SQL. Showing
+ * one, so the analyst lists what is there, reads a schema, and writes its own SQL. Showing
  * those real steps is the point: a bespoke endpoint on screen would be the thing a
  * technical counterpart catches.
  *
- * Steps stream to the browser as they happen, so the screen renders the agent thinking
+ * Steps stream to the browser as they happen, so the screen renders the analyst thinking
  * rather than a finished transcript.
  */
 import Anthropic from '@anthropic-ai/sdk';
@@ -19,7 +19,7 @@ const MODEL = 'claude-opus-5-5';
 const MAX_TURNS = 8;
 const MAX_RESULT_ROWS = 200;
 
-const SYSTEM = `You are the risk agent on a capital markets desk. You answer questions about client exposure using only the real-time tables available through your tools.
+const SYSTEM = `You are the analyst on a capital markets desk. You answer questions about client exposure, when asked, using only the real-time tables available through your tools. Watching clients and escalating to the risk officer is the risk agent's job, not yours.
 
 How to work:
 - Call listTopics first to see what is available.
@@ -114,7 +114,7 @@ export async function* ask(question: string, deps: AgentDeps): AsyncGenerator<Ag
     input_schema: t.inputSchema as Anthropic.Tool['input_schema'],
   }));
 
-  // The agent has no clock of its own, and "how old is this answer" is the question the
+  // The analyst has no clock of its own, and "how old is this answer" is the question the
   // whole demo turns on. Without this it correctly refuses to state an age, which is
   // honest and useless. Sent in the user turn rather than the system prompt so the
   // cached prefix survives.

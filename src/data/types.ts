@@ -59,11 +59,20 @@ export interface Position {
   source: string;
 }
 
+/**
+ * Who wrote an escalation: the deck's risk agent, the Worker's threshold check standing in
+ * for it, or the simulator. Named on every one, as `origin` is on every snapshot, so a fallback
+ * mid-demo changes the label rather than passing one writer off as another.
+ */
+export type EscalationAuthor = 'risk-agent' | 'threshold-check' | 'simulator';
+
 export interface Escalation {
   at: number;
-  who: string;
+  /** What happened, as the audience reads it: who it reached, or what caught it. */
+  title: string;
   what: string;
   tone: 'warn' | 'bad';
+  author: EscalationAuthor;
 }
 
 export interface PendingFill {

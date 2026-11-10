@@ -21,7 +21,7 @@ Flink, so it holds whether or not ticket 16 lands.
 
 **Blocked by:** none.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] The MCP agent is called the analyst on the screen, in `worker/agent.ts`'s system prompt and in the copy
 - [ ] At rest, in live Streamhouse mode, the escalation panel is empty
@@ -30,3 +30,14 @@ Flink, so it holds whether or not ticket 16 lands.
 - [ ] The simulator's escalation is a note naming the client, the crossing time, the fill and the new utilisation
 - [ ] The Worker's fallback rule is covered by a test, and the shared contract suite still passes for both sources
 - [ ] `scripts/shoot.sh` screenshots show the empty panel at rest and the one escalation after a fill
+
+**Found while checking it live:** the presenter's 1,200-lot fill does not cross 85% on the
+live stack. Flink prices a fill at quantity times price, so 1,200 lots at 5,414 add about
+$6.5m and take 4417 from 81.4% to about 82.8%; the simulator prices a lot at about $21.6k,
+which is why its contract test crosses. The screenshots used a 4,000-lot fill posted to
+`/api/fill` (to about 86%), then a -4,000 fill to put 4417 back. The fill size, or the live
+price per lot, needs settling before the 7:15 beat is rehearsed.
+
+Screenshots, live Streamhouse mode against the local Worker: `artifacts/t18-rest-view.png`
+(empty panel, with 2286, 8803 and 6154 over 85% in the book) and
+`artifacts/t18-after-fill-view.png` (one escalation, 4417, by the threshold check).

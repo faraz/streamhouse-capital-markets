@@ -24,10 +24,10 @@ const GATE = import.meta.env['VITE_DEMO_GATE'] ?? 'local-dev';
 
 /**
  * The star of the demo. The engine exposes three generic tools and no mechanism for a
- * purpose-built one, so the agent lists topics, reads a schema, then writes its own SQL,
+ * purpose-built one, so the analyst lists topics, reads a schema, then writes its own SQL,
  * and every one of those steps appears as it happens.
  *
- * The answer is typed rather than revealed, because an agent speaking to a desk is the
+ * The answer is typed rather than revealed, because an analyst speaking to a desk is the
  * thing being shown. Everything before it lands instantly: a tool call that faded in
  * slowly would read as decoration over something that genuinely took time.
  */
@@ -51,7 +51,7 @@ export function AgentPanel({ snapshot }: { snapshot: DeskSnapshot }) {
         headers: { 'Content-Type': 'application/json', 'x-demo-gate': GATE },
         body: JSON.stringify({ question: q }),
       });
-      if (!res.ok || !res.body) throw new Error(`the agent route returned ${res.status}`);
+      if (!res.ok || !res.body) throw new Error(`the analyst's route returned ${res.status}`);
 
       const reader = res.body.getReader();
       const dec = new TextDecoder();
@@ -95,7 +95,7 @@ export function AgentPanel({ snapshot }: { snapshot: DeskSnapshot }) {
     >
       <div className="panel-head">
         <span className="panel-title">
-          The risk agent / asking over MCP through the Real-Time Context Engine
+          The analyst / asking over MCP through the Real-Time Context Engine
         </span>
         <span className="lbl">{live ? 'Connected / 3 tools' : 'No MCP. Reading a copy.'}</span>
       </div>
@@ -130,7 +130,7 @@ export function AgentPanel({ snapshot }: { snapshot: DeskSnapshot }) {
             <span className="lbl">Real-Time Context Engine / MCP</span>
             <p>
               Three tools are on the connection: listTopics, getMetadata and queryData. Ask a
-              question and the agent will pick its own way to the answer.
+              question and the analyst will pick its own way to the answer.
             </p>
           </div>
         ) : null}
@@ -188,8 +188,8 @@ export function AgentPanel({ snapshot }: { snapshot: DeskSnapshot }) {
 
       <p className="panel-note">
         {live
-          ? 'The engine exposes three generic tools, so the agent writes its own SQL rather than calling a purpose-built endpoint.'
-          : 'In the before-world there is nothing to connect an agent to, so it reads whatever copy was loaded last. It answers confidently and it is wrong, at machine speed.'}
+          ? 'The engine exposes three generic tools, so the analyst writes its own SQL rather than calling a purpose-built endpoint.'
+          : 'In the before-world there is nothing to connect the analyst to, so it reads whatever copy was loaded last. It answers confidently and it is wrong, at machine speed.'}
       </p>
     </SpotlightCard>
   );

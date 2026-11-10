@@ -56,7 +56,7 @@ function harness(opts: { viaGlobalFetch?: boolean } = {}) {
           source: p.source,
         })),
         rejected: s.rejected ? { raw: s.rejected.raw, reason: s.rejected.reason } : null,
-        escalations: s.escalations.map((e) => ({ atMs: e.at, who: e.who, what: e.what, tone: e.tone })),
+        escalations: s.escalations.map((e) => ({ atMs: e.at, title: e.title, what: e.what, tone: e.tone, author: e.author })),
         activeSources: ['mq_intraday', 'venue', 'book_of_record'],
         normalized: s.normalized,
         servedAgeMs: s.clocks.servedAgeMs,

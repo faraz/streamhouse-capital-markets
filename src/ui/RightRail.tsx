@@ -1,14 +1,24 @@
 import { AnimatePresence, motion } from 'motion/react';
 import CountUp from '../reactbits/CountUp';
 import ElectricBorder from '../reactbits/ElectricBorder';
-import type { DeskSnapshot } from '../data/types';
+import type { DeskSnapshot, EscalationAuthor } from '../data/types';
 import { PALETTE, age, freshness, money } from './format';
 
 /**
  * Escalations arrive; they do not pulse. A breach gets the electric border, once, because
  * it is the only thing on the screen that means someone has to act. Spending that device
  * anywhere else would spend its meaning.
+ *
+ * Every row names who wrote it, coloured as the origin badge is: the risk agent is live
+ * Confluent, the simulator is the fallback, and the threshold check is the Worker standing
+ * in. Rows are the same shape whoever wrote them, so a fallback changes only the label.
  */
+const AUTHOR: Record<EscalationAuthor, string> = {
+  'risk-agent': 'Risk agent',
+  'threshold-check': 'Threshold check',
+  simulator: 'Simulator',
+};
+
 export function Escalations({ snapshot }: { snapshot: DeskSnapshot }) {
   const rows = snapshot.escalations.slice(0, 4);
   return (
@@ -20,7 +30,7 @@ export function Escalations({ snapshot }: { snapshot: DeskSnapshot }) {
 
       <div className="esc">
         {rows.length === 0 ? (
-          <div className="esc-none">No client within 10% of a limit.</div>
+          <div className="esc-none">No client has just crossed 85% of its limit.</div>
         ) : (
           <AnimatePresence initial={false}>
             {rows.map((e, i) => {
@@ -33,7 +43,12 @@ export function Escalations({ snapshot }: { snapshot: DeskSnapshot }) {
                   exit={{ opacity: 0 }}
                   transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
                 >
-                  <span className="esc-who">{e.who}</span>
+                  <span className="esc-top">
+                    <span className="esc-title">{e.title}</span>
+                    <span className="esc-by" data-author={e.author}>
+                      {AUTHOR[e.author]}
+                    </span>
+                  </span>
                   <span className="esc-what">{e.what}</span>
                 </motion.div>
               );
@@ -59,7 +74,7 @@ export function Escalations({ snapshot }: { snapshot: DeskSnapshot }) {
         )}
       </div>
 
-      <p className="panel-note">The agent never touches an order. It gets a person there in time.</p>
+      <p className="panel-note">The risk agent never touches an order. It gets a person there in time.</p>
     </section>
   );
 }

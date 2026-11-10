@@ -11,6 +11,7 @@
 import { num, rowsToObjects, runQuery, type QueryConfig } from '../src/data/query';
 import { ask } from './agent';
 import { fatFingerEvent, fillEvent, produceEvent, type ProduceConfig } from './produce';
+import { thresholdEscalations } from './threshold';
 
 export interface Env {
   CONFLUENT_SQL_ENDPOINT: string;
@@ -28,8 +29,6 @@ export interface Env {
   ASSETS: { fetch(req: Request): Promise<Response> };
 }
 
-/** Where the agent escalates. Kept identical to the simulator's threshold. */
-const ESCALATE_PCT = 85;
 const BOOK_ROWS = 200;
 
 const json = (body: unknown, status = 200) =>
@@ -121,17 +120,9 @@ async function snapshot(env: Env, clientId: string): Promise<Response> {
 
   const activeSources = [...new Set(rowsToObjects(srcQ).map((r) => r['SOURCE'] ?? ''))].filter(Boolean);
 
-  // Stands in until a Flink streaming agent writes these to a topic of its own. Identical
-  // on screen; the substitution is recorded rather than hidden.
-  const escalations = book
-    .filter((b) => b.limitUtilPct >= ESCALATE_PCT)
-    .slice(0, 5)
-    .map((b) => ({
-      atMs: b.asOfMs,
-      who: 'Escalated to the risk officer',
-      what: `Client ${b.clientId} at ${b.limitUtilPct.toFixed(1)}% of limit.`,
-      tone: 'warn' as const,
-    }));
+  // Stands in until the risk agent writes these to a table of its own (ticket 16). Each one
+  // says it came from the threshold check, so the substitution is shown rather than hidden.
+  const escalations = thresholdEscalations(book, Date.now());
 
   const newest = recent[0];
   const normalized = newest
@@ -180,7 +171,7 @@ function produceConfig(env: Env): ProduceConfig | null {
 }
 
 /**
- * The agent's steps, streamed as they happen, so the screen renders it working rather
+ * The analyst's steps, streamed as they happen, so the screen renders it working rather
  * than a finished transcript. One event per step, newline-delimited JSON over SSE.
  */
 function streamSteps(question: string, env: Env): Response {
@@ -199,7 +190,7 @@ function streamSteps(question: string, env: Env): Response {
         await writer.write(enc.encode(`data: ${JSON.stringify(step)}\n\n`));
       }
     } catch (e) {
-      const body = e instanceof Error ? e.message : 'the agent failed';
+      const body = e instanceof Error ? e.message : 'the analyst failed';
       await writer.write(enc.encode(`data: ${JSON.stringify({ kind: 'error', tag: 'Failed', body })}\n\n`));
     } finally {
       await writer.write(enc.encode('data: [DONE]\n\n'));
@@ -232,7 +223,7 @@ export default {
       }
       if (url.pathname === '/api/ask' && req.method === 'POST') {
         if (!env.ANTHROPIC_API_KEY || !env.RTCE_MCP_URL) {
-          return json({ error: 'the agent needs ANTHROPIC_API_KEY and RTCE_MCP_URL' }, 503);
+          return json({ error: 'the analyst needs ANTHROPIC_API_KEY and RTCE_MCP_URL' }, 503);
         }
         const { question } = (await req.json()) as { question?: string };
         if (!question?.trim()) return json({ error: 'no question' }, 400);

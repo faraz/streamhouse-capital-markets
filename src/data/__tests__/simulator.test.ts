@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Simulator } from '../simulator';
+import { COMMIT_MS, DEFAULT_FILL_LOTS, MATERIALIZE_MS, Simulator } from '../simulator';
 import { FOLLOWED } from '../book';
 import { runContract } from './contract';
 
@@ -31,5 +31,21 @@ describe('simulator: determinism', () => {
     await new Promise((r) => setTimeout(r, 30));
     const b = await source.snapshot(FOLLOWED);
     expect(b.wallClock).toBe(a.wallClock);
+  });
+});
+
+describe('simulator: the escalation reads like the risk agent will', () => {
+  // The fill lands at 14:06:22 and Flink commits it at the next minute, 14:07:22. 4417 is
+  // at about 81% of a $450m limit, and 1,200 lots add about $26m, so it reads near 86.7%.
+  it('is a note naming the client, when it crossed, the fill and where it now stands', async () => {
+    const { source, advance } = harness();
+    await source.produceFill(FOLLOWED, DEFAULT_FILL_LOTS);
+    advance(COMMIT_MS + MATERIALIZE_MS + 1_000);
+
+    const [e] = (await source.snapshot(FOLLOWED)).escalations;
+    expect(e!.author).toBe('simulator');
+    expect(e!.what).toMatch(
+      /^Client 4417 crossed 85% at 14:07:22 on a 1,200 lot ESU6 fill; now 8[67]\.\d% of a \$450m limit\.$/,
+    );
   });
 });

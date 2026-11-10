@@ -1,5 +1,5 @@
 import type {
-  Clock, ClientExposure, DeskSnapshot, Escalation, ExposureSource,
+  Clock, ClientExposure, DeskSnapshot, Escalation, EscalationAuthor, ExposureSource,
   Isolation, Mode, NormalizedRecord, Position, RejectedRecord, SourceAge,
 } from './types';
 import { Simulator, OPENING_MS } from './simulator';
@@ -135,9 +135,10 @@ export class LiveSource implements ExposureSource {
 
     const escalations: Escalation[] = wire.escalations.map((e) => ({
       at: e.atMs,
-      who: e.who,
+      title: e.title,
       what: e.what,
       tone: e.tone,
+      author: e.author,
     }));
 
     const normalized: NormalizedRecord = wire.normalized ?? {
@@ -206,6 +207,14 @@ export class LiveSource implements ExposureSource {
   }
 }
 
+export interface WireEscalation {
+  atMs: number;
+  title: string;
+  what: string;
+  tone: 'warn' | 'bad';
+  author: EscalationAuthor;
+}
+
 /** What the server route returns. Flat and already parsed, so the screen does no maths. */
 export interface WireSnapshot {
   served: { exposureUsd: number; limitUsd: number; limitUtilPct: number; asOfMs: number };
@@ -214,7 +223,7 @@ export interface WireSnapshot {
   active: Array<{ clientId: string; exposureUsd: number; limitUsd: number; limitUtilPct: number; asOfMs: number }>;
   recent: Array<{ clientId: string; symbol: string; quantity: number; price: number; eventTimeMs: number; source: string }>;
   rejected: { raw: string; reason: string } | null;
-  escalations: Array<{ atMs: number; who: string; what: string; tone: 'warn' | 'bad' }>;
+  escalations: WireEscalation[];
   activeSources: string[];
   normalized: NormalizedRecord | null;
   servedAgeMs: number;

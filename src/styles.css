@@ -235,7 +235,11 @@
   .esc-row { background: var(--ink); padding: 10px 13px; display: flex; flex-direction: column; gap: 4px; animation: rise 260ms ease both; }
   .esc-row[data-tone="warn"] { box-shadow: inset 1px 0 0 var(--amber); }
   .esc-row[data-tone="bad"] { box-shadow: inset 1px 0 0 var(--alert); background: #14090C; }
-  .esc-who { font-family: var(--mono); font-size: 10px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: var(--mist); }
+  .esc-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+  .esc-title { font-family: var(--mono); font-size: 10px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: var(--mist); }
+  .esc-by { flex: 0 0 auto; font-family: var(--mono); font-size: 9.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; padding: 2px 6px; border-radius: 3px; border: 1px solid var(--edge); color: var(--mist); }
+  .esc-by[data-author="risk-agent"] { color: var(--mint); border-color: rgba(99, 230, 174, 0.5); }
+  .esc-by[data-author="simulator"] { color: var(--amber); border-color: rgba(255, 194, 75, 0.5); }
   .esc-what { font-size: 13px; line-height: 1.45; }
   .esc-none { background: var(--ink); padding: 18px 13px; font-size: 13px; color: var(--mist); text-align: center; }
 
