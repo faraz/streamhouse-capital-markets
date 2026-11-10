@@ -130,7 +130,15 @@ export function useDesk() {
       await source.produceFill(FOLLOWED, lots);
       await refresh();
     },
-    fatFinger: async () => { await source.produceFatFinger(client); await refresh(); },
+    // 4417 too: nothing else trades it, so the figure standing still is the guard's doing. On
+    // a feed client the trades would move it anyway and the point would be lost.
+    fatFinger: async () => {
+      pickFreshest.current = false;
+      autoFollow.current = false;
+      setClientState(FOLLOWED);
+      await source.produceFatFinger(FOLLOWED);
+      await refresh();
+    },
     reset: async () => {
       try {
         await source.reset();

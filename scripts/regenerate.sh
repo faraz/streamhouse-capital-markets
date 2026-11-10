@@ -25,19 +25,35 @@ say() { printf '\n== %s\n' "$1"; }
 
 # Every statement needs a name no earlier run has used: a create that collides with an
 # existing name fails almost silently.
+#
+# The status lookup is retried, and a create that did not land is tried once more: one run
+# died here when the API failed both calls for a moment, and under set -e the failed lookup
+# ended the script before it could say which statement it was on.
+status_of() {
+  local out attempt
+  for attempt in 1 2 3; do
+    if out=$(confluent flink statement list "${FLAGS_ENV[@]}" -o json 2>/dev/null); then
+      printf '%s' "$out" | jq -r --arg n "$1" '.[]|select(.name==$n)|.status'
+      return 0
+    fi
+    sleep 5
+  done
+}
 submit() {
-  local label="$1" file="$2"
-  confluent flink statement create "cm-${label}-${STAMP}" --sql="$(cat "$file")" "${FLAGS_SQL[@]}" --wait >/dev/null 2>&1 || true
-  local st
-  st=$(confluent flink statement list "${FLAGS_ENV[@]}" -o json 2>/dev/null \
-       | jq -r --arg n "cm-${label}-${STAMP}" '.[]|select(.name==$n)|.status')
+  local label="$1" file="$2" name="cm-${1}-${STAMP}" st
+  confluent flink statement create "$name" --sql="$(cat "$file")" "${FLAGS_SQL[@]}" --wait >/dev/null 2>&1 || true
+  st=$(status_of "$name")
+  if [ -z "$st" ]; then
+    sleep 5
+    confluent flink statement create "$name" --sql="$(cat "$file")" "${FLAGS_SQL[@]}" --wait >/dev/null 2>&1 || true
+    st=$(status_of "$name")
+  fi
   # PENDING after --wait means the pool has no CFU left to start it, and it will sit there
   # for good. Seen once as sixteen seeds reporting PENDING while the run carried on.
   local waited=0
   while [ "$st" = "PENDING" ] && [ "$waited" -lt 60 ]; do
     sleep 10; waited=$((waited + 10))
-    st=$(confluent flink statement list "${FLAGS_ENV[@]}" -o json 2>/dev/null \
-         | jq -r --arg n "cm-${label}-${STAMP}" '.[]|select(.name==$n)|.status')
+    st=$(status_of "$name")
   done
   printf '  %-22s %s\n' "$label" "${st:-NOT CREATED}"
   if [ "$st" = "PENDING" ]; then
@@ -50,9 +66,10 @@ submit() {
 # Each running statement holds at least one CFU. This run leaves CONTINUOUS statements
 # running and needs one more slot at a time for the bounded seeds, so check the pool has
 # room before changing anything rather than finding out halfway through. Ten normalizers and
-# guards, and the materialized table's query, which holds a CFU like any statement although
-# the statement list does not show it.
-CONTINUOUS=11
+# guards; the queries of the two materialized tables, client_exposure and exposure_crossings,
+# which hold a CFU each like any statement although the statement list does not show them;
+# and the risk agent's statement.
+CONTINUOUS=13
 capacity_check() {
   local pool max cur
   pool=$(confluent flink compute-pool describe "$DEMO_FLINK_POOL_ID" -o json)
@@ -172,7 +189,7 @@ say "Lightning Tables"
 # The description is the only documentation an MCP agent gets for a topic, and it is
 # capped at 256 characters. Held in variables because a parenthesis inside a case branch
 # in a command substitution does not parse.
-DESC_EXPOSURE="Current exposure per client, keyed by client_id, with limit_usd, limit_util_pct and as_of. Query by client_id for one client, or ORDER BY limit_util_pct DESC for the book."
+DESC_EXPOSURE="Current exposure per client by client_id: limit_usd, limit_util_pct, as_of, and what last moved it (last_source, last_symbol, last_quantity, prev_limit_util_pct). ORDER BY limit_util_pct DESC for the book."
 DESC_POSITIONS="Append-only position records, one row per fact: client_id, symbol, quantity, price, notional_usd, event_time, source feed, ingest_lag_ms for feed staleness. Use for recent activity. Not the exposure total: that is client_exposure."
 DESC_DLQ="Records rejected by the Flink guard: well-formed but wrong, with the reason they were refused."
 
@@ -260,5 +277,23 @@ else
   exit 1
 fi
 
+say "the risk agent"
+# After the book is right, never before: the crossings start from now, and a crossing table
+# started during the replay would take its partial totals for clients crossing the line.
+submit risk-model flink/30-create-risk-model.sql
+submit risk-agent flink/32-create-risk-agent.sql
+submit mt-xing    flink/33-materialize-exposure-crossings.sql
+confluent flink materialized-table list "${FLAGS_ENV[@]}" -o json 2>/dev/null \
+  | jq -e '.[]|select(.name=="exposure_crossings" and .stopped == false)' >/dev/null \
+  || { echo "  exposure_crossings is not listed as a running materialized table" >&2; exit 1; }
+submit ddl-esc    flink/34-create-client-escalations.sql
+submit warm-esc   flink/35-warm-client-escalations.sql
+DESC_ESC="What the risk agent wrote when a client crossed 85% of its limit: client_id, crossed_at, limit_util_pct, note. Newest first with ORDER BY crossed_at DESC."
+enable_lt client_escalations "$DESC_ESC"
+# Last, and from the latest offset: no crossing from before this line reaches the model.
+submit esc        flink/36-run-risk-agent.sql
+
 say "done"
+echo "  The escalations' Lightning Table answers a few minutes after this; until it does, the"
+echo "  screen escalates with the threshold check, and says so."
 echo "  Check with: scripts/verify.sh"

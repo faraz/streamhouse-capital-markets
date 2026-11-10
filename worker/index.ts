@@ -13,7 +13,7 @@ import { ask } from './agent';
 import { fatFingerEvent, fillEvent, flinkTimestamp, produceEvent, type ProduceConfig } from './produce';
 import { resetEvents } from './reset';
 import { FILL_LOTS } from '../src/data/fill';
-import { thresholdEscalations } from './threshold';
+import { escalations as panel, type AgentNote } from './escalations';
 
 export interface Env {
   CONFLUENT_SQL_ENDPOINT: string;
@@ -68,7 +68,7 @@ async function snapshot(env: Env, clientId: string): Promise<Response> {
   const id = esc(clientId);
 
   // Concurrent: the waiting is network, which the CPU budget does not count.
-  const [servedQ, bookQ, recentQ, dlqQ, srcQ, activeQ] = await Promise.all([
+  const [servedQ, bookQ, recentQ, dlqQ, srcQ, activeQ, notesQ] = await Promise.all([
     runQuery(c, `SELECT client_id, exposure_usd, limit_usd, limit_util_pct, as_of FROM client_exposure WHERE client_id = '${id}' LIMIT 1`),
     runQuery(c, `SELECT client_id, exposure_usd, limit_usd, limit_util_pct, as_of FROM client_exposure ORDER BY limit_util_pct DESC LIMIT ${BOOK_ROWS}`),
     runQuery(c, `SELECT client_id, symbol, quantity, price, event_time, source, ingest_lag_ms FROM positions WHERE client_id = '${id}' ORDER BY event_time DESC LIMIT 5`),
@@ -79,6 +79,9 @@ async function snapshot(env: Env, clientId: string): Promise<Response> {
     // Whoever traded most recently. Sorting a Lightning Table on a stored timestamp is the
     // same operation as sorting the book on limit_util_pct.
     runQuery(c, `SELECT client_id, exposure_usd, limit_usd, limit_util_pct, as_of FROM client_exposure ORDER BY as_of DESC LIMIT 20`),
+    // What the risk agent wrote. Null when it cannot be read, which is the threshold check's
+    // cue to stand in at once rather than wait for a note that is not coming.
+    runQuery(c, `SELECT client_id, crossed_at, agent_status, note FROM client_escalations ORDER BY crossed_at DESC LIMIT 5`).catch(() => null),
   ]);
 
   const servedRow = rowsToObjects(servedQ)[0];
@@ -128,9 +131,15 @@ async function snapshot(env: Env, clientId: string): Promise<Response> {
 
   const activeSources = [...new Set(rowsToObjects(srcQ).map((r) => r['SOURCE'] ?? ''))].filter(Boolean);
 
-  // Stands in until the risk agent writes these to a table of its own (ticket 16). Each one
-  // says it came from the threshold check, so the substitution is shown rather than hidden.
-  const escalations = thresholdEscalations(book, Date.now());
+  const notes: AgentNote[] | null = notesQ
+    ? rowsToObjects(notesQ).map((r) => ({
+        clientId: r['CLIENT_ID'] ?? '',
+        crossedAtMs: tsToMs(r['CROSSED_AT']),
+        status: r['AGENT_STATUS'] ?? '',
+        note: r['NOTE'] ?? '',
+      }))
+    : null;
+  const escalations = panel(notes, book, Date.now());
 
   const newest = recent[0];
   const normalized = newest

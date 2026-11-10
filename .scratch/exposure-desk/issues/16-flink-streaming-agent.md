@@ -16,7 +16,7 @@ proven patterns and traps: `research/flink-materialized-tables-and-agents-2026-1
 
 **Blocked by:** 17, 18.
 
-**Status:** ready-for-agent
+**Status:** done
 
 **The pieces:**
 
@@ -62,3 +62,31 @@ the past. Wait for the replay (90000's row present and a fresh `as_of`) before c
 or filter on event time. Also: `CONTINUOUS` in `regenerate.sh` and the role list in
 `verify.sh` are fixed counts (11 and 10) that this ticket's statements must raise, and the
 materialized table's query is not in `statement list`, so verify cannot see it by name.
+
+**Outcome, 2026-11-10:** working, a day early. Measured on the live stack: a 5,000-lot fill on
+4417, the figure 55 s after the click (one commit; 11 s on another run), and the risk agent's
+note 9 s after that: "Client 4417 crossed 85% at 18:37:34 UTC on a 5,000-lot ESZ6 fill; now
+87.0% of a $450m limit." `verify.sh` passes in full with the agent's pieces in it.
+
+- **Model:** `SHOW MODELS` listed Sonnet 4.6, Opus 4.6, 4.7 and 4.8, and Haiku 4.5. Opus 4.8,
+  the newest, wrote the cleaner note in 13 s to Sonnet's 16 s on the same crossing.
+- **Two statements, not three.** `LAG` over event time never emitted: its output sat behind a
+  watermark for fifteen minutes. `client_exposure` now carries the utilisation before its
+  latest change and what that change was, so `exposure_crossings` is a filter, started from
+  now, with no watermark (ADR 0006, amended). The crossing row lands 4 to 13 s after the fill
+  reaches the figure.
+- **No MCP tool.** Built with one, the agent read the live figure a moment before the
+  Lightning Table caught up with the commit, and wrote that 4417 had dropped back to 81% when
+  it stood at 87%. The crossing row carries every fact the note needs, so the agent works from
+  it alone; MCP and RTCE are the analyst's. The first run with the tool also took 17 minutes
+  to write its note, most likely because the prompt did not name `queryData`'s required
+  `topic_name` and the agent retried; not investigated further once the tool went.
+- **Holding above 85% writes nothing more** (a crossing needs the previous figure below the
+  line), and Reset then a fill crossed again and wrote a second note.
+- **A rebuild escalates nothing:** the crossing table is created after the book is right and
+  starts from now, and the agent's statement from the latest offset.
+- **The threshold check** stands in only after 150 s without a note, or at once if the
+  escalations table cannot be read. It did, correctly, during the 17-minute run.
+
+Only one timed run was made with the final, tool-free agent. Rehearse the beat two or three
+times before Thursday.

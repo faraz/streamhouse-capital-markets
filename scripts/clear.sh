@@ -20,6 +20,7 @@ PATH="/opt/homebrew/bin:$PATH"
 set -a; . ./.env; set +a
 
 FLAGS_ENV=(--cloud aws --region us-east-1 --environment "$DEMO_ENVIRONMENT_ID")
+FLAGS_SQL=(--compute-pool "$DEMO_FLINK_POOL_ID" --database "$DEMO_CLUSTER_ID" --environment "$DEMO_ENVIRONMENT_ID")
 say() { printf '\n== %s\n' "$1"; }
 
 confluent environment use "$DEMO_ENVIRONMENT_ID" >/dev/null 2>&1
@@ -49,9 +50,10 @@ for t in $(confluent rtce rtce-topic list --environment "$DEMO_ENVIRONMENT_ID" \
 done
 
 say "materialized tables"
-# Only this cluster's: the list spans the environment.
+# Only this cluster's: the list spans the environment. client_exposure goes last, after the
+# tables that read it.
 for t in $(confluent flink materialized-table list "${FLAGS_ENV[@]}" -o json 2>/dev/null \
-           | jq -r --arg db "$DEMO_CLUSTER_ID" '.[]|select(.database==$db)|.name'); do
+           | jq -r --arg db "$DEMO_CLUSTER_ID" '[.[]|select(.database==$db)|.name] | sort_by(. == "client_exposure") | .[]'); do
   confluent flink materialized-table delete "$t" "${FLAGS_ENV[@]}" --database "$DEMO_CLUSTER_ID" --force >/dev/null 2>&1 \
     && echo "  deleted $t" || echo "  could not delete $t"
 done
@@ -61,6 +63,18 @@ for t in $(confluent kafka topic list -o json 2>/dev/null \
            | jq -r '.[]|select(.name|startswith("_")|not)|.name'); do
   confluent kafka topic delete "$t" --force >/dev/null 2>&1 && echo "  deleted $t" || echo "  could not delete $t"
 done
+
+say "the risk agent"
+# Catalog objects, not data, but regenerate.sh creates them, so they go too: the agent before
+# the model it uses. The tool and the MCP connection are dropped too, if a run made them.
+STAMP=$(date +%H%M%S)
+i=0
+for q in "DROP AGENT IF EXISTS risk_agent" "DROP TOOL IF EXISTS rtce_context" "DROP MODEL IF EXISTS risk_model"; do
+  i=$((i + 1))
+  st=$(confluent flink statement create "cm-drop-$i-$STAMP" --sql="$q;" "${FLAGS_SQL[@]}" --wait -o json 2>/dev/null | jq -r '.status // empty')
+  if [ "$st" = "COMPLETED" ]; then echo "  $q"; else echo "  could not: $q (${st:-no status})"; fi
+done
+confluent flink connection delete rtce-mcp "${FLAGS_ENV[@]}" --force >/dev/null 2>&1 && echo "  deleted connection rtce-mcp"
 
 say "what is left"
 printf '  connectors: %s\n' "$(confluent connect cluster list --environment "$DEMO_ENVIRONMENT_ID" --cluster "$DEMO_CLUSTER_ID" -o json 2>/dev/null | jq -r 'length')"

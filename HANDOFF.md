@@ -85,25 +85,29 @@ anyway.
 
 ## The run-of-show
 
-Approved by the user. This is the specification for what must work; anything not on this
-list is not Tier 1. About 10:45 including the Bob beat.
+Revised 2026-11-10 to what the demo lands: **Lightning Tables, the materialized table, the
+Streaming Agent, and MCP through the Real-Time Context Engine**. Tableflow, Bob and the
+read-uncommitted control are out. Everything below runs on the live stack; Before mode is a
+script whose "what was really true" is the live figure. About nine minutes.
 
 | Time | Beat |
 |---|---|
-| 0:00 | Open in **Before**. The question, six sources, six ages, stalest flagged. One number, no age stamp. |
-| 1:00 | Ask the agent the exposure question. It says 68% of limit, no action needed. Then what was actually true, and the next-morning discovery at 103%. Switch to client 7405 for ~20s to show the **false block**: stale file reads 98%, the client was at 77% all along. |
-| 2:30 | Flip to **Streamhouse**. The normalization lane: six shapes, one record, with an age. Schema contract and lineage. |
-| 4:00 | **Send a fat finger.** Rejected to `positions.dlq`; the number never moves. |
-| 4:45 | Ask the exposure question again. Correct, with its age stamp, showing the tool calls and the SQL the agent wrote itself. |
-| 6:15 | Ask the book question. 4,000 clients, top-N by `limit_util_pct`, same table. |
-| 7:15 | **A fill arrives.** Ask what just changed. The escalation fires on its own. |
-| 8:45 | Flip to **read uncommitted**. Age drops under 100ms. Name the price: exactly once. |
-| 9:30 | Bob queries the same MCP endpoint. Proves it is an interface, not a bespoke integration. |
-| 10:15 | The three clocks, and the open table for reporting and audit. Zero pipelines. |
+| 0:00 | Open in **Before**. The question, six sources, six ages, stalest flagged. |
+| 1:00 | Ask the analyst the exposure question. It reads last night's copy: 68%, no action needed. Then what was true, read live (81%), and the next-morning discovery at 103%. Click 7405 for ~20 s: the copy reads 98%, the client is at 77%, the **false block**. |
+| 2:30 | Flip to **Streamhouse**. Six shapes, one governed record, with an age. |
+| 3:30 | **Send a fat finger** (always on 4417). Rejected to `positions_dlq` within a minute; 4417's figure never moves. |
+| 4:15 | Ask the exposure question again. The analyst lists the topics, reads a schema, writes its own SQL against the Lightning Table, and states the age. About 40 s. |
+| 5:15 | Ask the book question: the top of 4,000 clients by `limit_util_pct`, the same table. |
+| 6:15 | **A fill arrives** (always 4417, $27.07m: say the dollars, not the lots). Ask the analyst "what just changed?" while it lands: the figure moves to 87.4% at the next commit, then the **risk agent's** note appears in Escalations, written by the Streaming Agent from the crossing Flink detected. Timings below. |
+| 7:45 | The price of exactly-once, said rather than shown: "the figure waits for Flink's next commit; we computed it in one step so there is only one; a late figure beats a doubled one." |
+| 8:15 | **Console cutaway**: Materialized tables (`client_exposure`, `exposure_crossings`), then Streaming Agents (`risk_agent`), then the topics list with the Lightning Tables column. |
 
-Two **console cutaways** of about 20 seconds each, which need no build, only rehearsal:
-the topics list showing the Lightning Tables column, and the Stream Lineage graph. The
-Confluent AI Assistant can be asked a question during the second one at no extra cost.
+Measured 2026-11-10 for the 6:15 beat: the figure 11 to 56 s after the click (one commit),
+the risk agent's note about 10 s after the figure. The analyst's answer to "what just
+changed?" takes about 40 s and covers the wait.
+
+Before the room: `scripts/verify.sh --quick`, then press **Reset** and wait for 4417 to read
+81%. Reset also offsets any rehearsal fills; nothing needs rebuilding.
 
 ## Facts that will bite you
 

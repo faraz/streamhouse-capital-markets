@@ -25,3 +25,26 @@ time; the agent thinks only when something changes.
   stays exactly-once, so the commit beat stays true.
 - The Worker's threshold check stays as the fallback, and every escalation says which of
   them wrote it.
+
+## Amended 2026-11-10: a crossing is a filter, not a comparison over time
+
+Built, the `LAG` design did not emit: its append stage filled at about 110 rows a minute, a
+bounded run of the same query found the one crossing it should, and the streaming version
+sat behind a watermark that did not move for fifteen minutes. Event-time ordering was the
+part that could not be relied on two days out.
+
+So `client_exposure` carries the utilisation before its latest change, and what that change
+was (`LAST_VALUE` of the record that produced each update), and `exposure_crossings` is a
+filter on its changelog: below 85% before, 85% or above after. It takes two statements, not
+three, waits on no watermark, and starts from now, so no history is needed and a rebuild
+cannot re-escalate the past. Measured: the crossing row 13 s after the fill. The cause rides in
+the row, so the agent never depends on `positions`, which another statement commits on its
+own minute.
+
+The agent has no tool. It was built with an MCP tool to read the live figure before writing,
+and that read landed a moment before the Lightning Table caught up with the commit: the
+agent wrote that 4417 had dropped back to 81% when it stood at 87%. The crossing row holds
+every fact the note needs, so the agent works from it alone; MCP is the analyst's.
+
+The Worker shows the agent's note, and stands the threshold check in for a crossing only
+after 150 s with no note, or at once if the agent's table cannot be read.

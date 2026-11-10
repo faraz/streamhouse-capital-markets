@@ -38,7 +38,7 @@ section "Flink statements"
 STMTS=$(confluent flink statement list --cloud aws --region us-east-1 \
   --environment "$DEMO_ENVIRONMENT_ID" -o json 2>/dev/null)
 # Names carry a timestamp per rebuild, so each role is checked by its prefix.
-for role in n-mq n-ven n-dsk n-cus n-clr n-bor n-evt n-trd g-mq g-evt; do
+for role in n-mq n-ven n-dsk n-cus n-clr n-bor n-evt n-trd g-mq g-evt esc; do
   st=$(printf '%s' "$STMTS" | jq -r --arg r "cm-$role-" \
        '[.[] | select(.name | startswith($r))] | sort_by(.name) | last | .status // empty')
   if [ "$st" = "RUNNING" ]; then pass "$role is RUNNING"; else fail "$role is ${st:-missing}"; fi
@@ -48,16 +48,18 @@ section "The materialized table"
 # Its query runs as a statement the list does not show, and neither the CLI nor the API
 # gives it a status. Here it is checked to exist and not be stopped; that it is keeping the
 # number is checked by doing it: the freshest as_of below, and the convergence test.
-MT=$(confluent flink materialized-table list --cloud aws --region us-east-1 \
-  --environment "$DEMO_ENVIRONMENT_ID" -o json 2>/dev/null \
-  | jq -r '.[] | select(.name=="client_exposure") | if .stopped == false then "running" else "stopped" end')
-if [ "$MT" = "running" ]; then pass "client_exposure exists as a materialized table and is not stopped"
-else fail "client_exposure is ${MT:-not a materialized table}"; fi
+MTS=$(confluent flink materialized-table list --cloud aws --region us-east-1 \
+  --environment "$DEMO_ENVIRONMENT_ID" -o json 2>/dev/null)
+for t in client_exposure exposure_crossings; do
+  MT=$(printf '%s' "$MTS" | jq -r --arg t "$t" '.[] | select(.name==$t) | if .stopped == false then "running" else "stopped" end')
+  if [ "$MT" = "running" ]; then pass "$t exists as a materialized table and is not stopped"
+  else fail "$t is ${MT:-not a materialized table}"; fi
+done
 
 section "Lightning Tables"
 LT=$(confluent rtce rtce-topic list --environment "$DEMO_ENVIRONMENT_ID" \
   --cluster "$DEMO_CLUSTER_ID" -o json 2>/dev/null)
-for t in client_exposure positions positions_dlq; do
+for t in client_exposure positions positions_dlq client_escalations; do
   ph=$(printf '%s' "$LT" | jq -r --arg t "$t" '.[] | select(.topic_name==$t) | .phase')
   if [ "$ph" = "ACTIVE" ]; then pass "$t is ACTIVE"; else fail "$t is ${ph:-missing}"; fi
 done
@@ -65,7 +67,7 @@ done
 section "Queryability"
 # ACTIVE does not mean queryable: a table reported ACTIVE and still refused queries for
 # another 20 seconds. So the check is a successful query, never a phase.
-for t in client_exposure positions positions_dlq; do
+for t in client_exposure positions positions_dlq client_escalations; do
   if query "SELECT * FROM $t LIMIT 1" | jq -e '.result' >/dev/null 2>&1; then
     pass "$t answers a query"
   else

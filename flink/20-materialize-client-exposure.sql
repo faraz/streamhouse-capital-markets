@@ -34,6 +34,13 @@
 -- non-deterministic in a query that produces updates, and an exposure figure's as-of time is
 -- properly the time of the latest record that went into it anyway.
 --
+-- It also carries the change that last moved it: the record's symbol, quantity, source and
+-- notional, and the utilisation before it. LAST_VALUE is the record that produced this
+-- update, so these describe exactly the step from the previous row to this one. That is what
+-- lets a crossing be found without ordering anything (33), and lets the risk agent and the
+-- analyst say what just changed from the figure itself, rather than from positions, which
+-- another statement writes on its own commit and may not have yet.
+--
 -- Deleting it (clear.sh does, with confluent flink materialized-table delete) deletes the
 -- topic and its schemas with it. That is what clear.sh wants and nothing else does.
 CREATE MATERIALIZED TABLE client_exposure (
@@ -41,6 +48,11 @@ CREATE MATERIALIZED TABLE client_exposure (
   exposure_usd DOUBLE NOT NULL,
   limit_usd DOUBLE NOT NULL,
   limit_util_pct DOUBLE NOT NULL,
+  prev_limit_util_pct DOUBLE NOT NULL,
+  last_symbol STRING NOT NULL,
+  last_quantity INT NOT NULL,
+  last_source STRING NOT NULL,
+  last_notional_usd DOUBLE NOT NULL,
   as_of TIMESTAMP(3) NOT NULL,
   PRIMARY KEY (client_id) NOT ENFORCED
 )
@@ -55,15 +67,20 @@ AS SELECT
   SUM(p.notional_usd) AS exposure_usd,
   l.limit_usd,
   (SUM(p.notional_usd) / l.limit_usd) * 100 AS limit_util_pct,
+  ((SUM(p.notional_usd) - COALESCE(LAST_VALUE(p.notional_usd), 0)) / l.limit_usd) * 100 AS prev_limit_util_pct,
+  COALESCE(LAST_VALUE(p.symbol), '') AS last_symbol,
+  COALESCE(LAST_VALUE(p.quantity), 0) AS last_quantity,
+  COALESCE(LAST_VALUE(p.source), '') AS last_source,
+  COALESCE(LAST_VALUE(p.notional_usd), 0) AS last_notional_usd,
   MAX(p.event_time) AS as_of
 FROM (
-  SELECT client_id, notional_usd, event_time
+  SELECT client_id, notional_usd, event_time, symbol, quantity, source
   FROM positions
   WHERE source NOT IN ('fill', 'fat_finger', 'reset', 'verify', 'setup')
   UNION ALL
   -- TO_TIMESTAMP is nullable and the declared schema is not, so the type is pinned with a
   -- COALESCE whose fallback the filter makes unreachable.
-  SELECT acct, CAST(qty AS DOUBLE) * px, COALESCE(TO_TIMESTAMP(ts), TIMESTAMP '1970-01-01 00:00:00')
+  SELECT acct, CAST(qty AS DOUBLE) * px, COALESCE(TO_TIMESTAMP(ts), TIMESTAMP '1970-01-01 00:00:00'), sym, CAST(qty AS INT), kind
   FROM raw_events
   WHERE ABS(CAST(qty AS INT)) <= 50000 AND TO_TIMESTAMP(ts) IS NOT NULL
 ) p
