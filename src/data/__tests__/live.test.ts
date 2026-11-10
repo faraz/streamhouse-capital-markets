@@ -93,11 +93,11 @@ function harness(opts: { viaGlobalFetch?: boolean } = {}) {
       if (this !== undefined && this !== globalThis) throw new TypeError('Illegal invocation');
       return fetchFn(...a);
     });
-    const source = new LiveSource({ clock, clientCount: 250, baseUrl: 'http://x' });
+    const source = new LiveSource({ clock, baseUrl: 'http://x' });
     return { source, advance: (ms: number) => { now += ms; } };
   }
 
-  const source = new LiveSource({ clock, fetchFn, clientCount: 250, baseUrl: 'http://x' });
+  const source = new LiveSource({ clock, fetchFn, baseUrl: 'http://x' });
   return { source, advance: (ms: number) => { now += ms; } };
 }
 
@@ -116,20 +116,25 @@ describe('live source: honesty about where the number came from', () => {
     expect((await source.snapshot(FOLLOWED)).origin).toBe('confluent');
   });
 
-  it('reports simulator as the origin in before mode, because nothing is queried', async () => {
+  it('in before mode answers from the overnight copy, and reads what was true from Confluent', async () => {
+    // Before is a script: the six legacy systems do not exist in the account. What the room
+    // is told was really true, though, is the live served figure, not a simulated one.
     const { source } = harness();
+    await source.setMode('streamhouse');
+    const live = await source.snapshot(FOLLOWED);
     await source.setMode('before');
-    expect((await source.snapshot(FOLLOWED)).origin).toBe('simulator');
+    const s = await source.snapshot(FOLLOWED);
+    expect(s.origin).toBe('confluent');
+    expect(s.served.exposureUsd).toBe(306.2e6);
+    expect(s.trueExposureUsd).toBe(live.served.exposureUsd);
   });
 
-  it('never calls the network in before mode', async () => {
-    let calls = 0;
-    let now = 0;
-    const fetchFn = (async () => { calls++; return new Response('{}', { status: 500 }); }) as unknown as typeof fetch;
-    const source = new LiveSource({ clock: () => now, fetchFn, clientCount: 50, baseUrl: 'http://x' });
+  it('labels the next-morning discovery as scripted, not as anyone watching', async () => {
+    const { source } = harness();
     await source.setMode('before');
-    await source.snapshot(FOLLOWED);
-    expect(calls).toBe(0);
+    const [e] = (await source.snapshot(FOLLOWED)).escalations;
+    expect(e!.author).toBe('scripted');
+    expect(e!.what).toMatch(/103% of limit/);
   });
 });
 

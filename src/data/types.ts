@@ -61,10 +61,10 @@ export interface Position {
 
 /**
  * Who wrote an escalation: the deck's risk agent, the Worker's threshold check standing in
- * for it, or the simulator. Named on every one, as `origin` is on every snapshot, so a fallback
+ * for it, the simulator, or the Before mode's script (the next-morning discovery). Named on every one, as `origin` is on every snapshot, so a fallback
  * mid-demo changes the label rather than passing one writer off as another.
  */
-export type EscalationAuthor = 'risk-agent' | 'threshold-check' | 'simulator';
+export type EscalationAuthor = 'risk-agent' | 'threshold-check' | 'simulator' | 'scripted';
 
 export interface Escalation {
   at: number;

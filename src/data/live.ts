@@ -2,17 +2,20 @@ import type {
   Clock, ClientExposure, DeskSnapshot, Escalation, EscalationAuthor, ExposureSource,
   Isolation, Mode, NormalizedRecord, Position, RejectedRecord, SourceAge,
 } from './types';
-import { COMMIT_MS, Simulator } from './simulator';
+import { COMMIT_MS } from './simulator';
+import { beforeSnapshot } from './before';
 import { FILL_PX } from './fill';
 import { LIVE_BOOK_OF_RECORD, SOURCES } from './sources';
 
 /**
- * The live source. Satisfies exactly the same contract as the simulator, by calling the
- * one server route that holds the credentials and fans out the queries.
+ * The live source, and the only one the screen uses. Satisfies the same contract as the
+ * simulator, which now exists for the tests, by calling the one server route that holds the
+ * credentials and fans out the queries.
  *
- * Before mode is delegated to the simulator, deliberately. The before-world is a fiction
- * about six legacy systems that do not exist in this account, and fabricating them in
- * Confluent would be dishonest about what is running. Streamhouse mode is the real thing.
+ * Before mode is a script (before.ts) over the same live answer. The before-world is a
+ * fiction about six legacy systems that do not exist in this account, and fabricating them
+ * in Confluent would be dishonest about what is running; what was really true in it is
+ * still the live figure.
  */
 export interface LiveOptions {
   /** Where the server route lives. Relative in the browser. */
@@ -21,7 +24,6 @@ export interface LiveOptions {
   gate?: string;
   clock: Clock;
   fetchFn?: typeof fetch;
-  clientCount?: number;
 }
 
 export class LiveSource implements ExposureSource {
@@ -29,8 +31,6 @@ export class LiveSource implements ExposureSource {
   private readonly gate: string;
   private readonly clock: Clock;
   private readonly doFetch: typeof fetch;
-  /** Answers Before mode, which has no Confluent in it. Nothing in Streamhouse mode reads it. */
-  private readonly fallback: Simulator;
   /**
    * The fills this screen has sent, each with the event time the Worker stamped on it. One is
    * in flight until its client's served as_of reaches that time: as_of is the newest event the
@@ -48,51 +48,50 @@ export class LiveSource implements ExposureSource {
     // Bound: storing window.fetch as a property loses its receiver and every call
     // throws 'Illegal invocation'. A test's injected stub needs no binding.
     this.doFetch = opts.fetchFn ?? ((...a: Parameters<typeof fetch>) => fetch(...a));
-    this.fallback = new Simulator({ clock: opts.clock, clientCount: opts.clientCount ?? 4000 });
   }
 
   async setMode(mode: Mode): Promise<void> {
     this.mode = mode;
-    await this.fallback.setMode(mode);
   }
 
   async setIsolation(level: Isolation): Promise<void> {
     this.isolation = level;
-    await this.fallback.setIsolation(level);
   }
 
   /**
    * Offsets every fill the presenter has sent, on the live stack too, so the next run starts
-   * from the opening book without a rebuild. In either mode: Before mode shows the simulator,
-   * but the fills it offsets are in Confluent.
+   * from the opening book without a rebuild. In either mode: the fills it offsets are in
+   * Confluent whichever world the screen is showing.
    */
   async reset(): Promise<void> {
-    await this.fallback.reset();
+    this.inFlight = [];
     await this.post('/api/reset', {});
   }
 
   async produceFill(clientId: string, lots: number): Promise<void> {
-    if (this.mode === 'before') return this.fallback.produceFill(clientId, lots);
+    // The before-world learns about trades overnight: a fill sent there would move the live
+    // book behind the story's back and be found at 7:15.
+    if (this.mode === 'before') return;
     const { produced } = (await this.post('/api/fill', { clientId, lots })) as { produced?: { ts?: string } };
     const eventMs = produced?.ts ? Date.parse(produced.ts.replace(' ', 'T') + 'Z') : NaN;
     if (Number.isFinite(eventMs)) this.inFlight.push({ clientId, lots, eventMs });
   }
 
   async produceFatFinger(clientId: string): Promise<void> {
-    if (this.mode === 'before') return this.fallback.produceFatFinger(clientId);
+    if (this.mode === 'before') return;
     await this.post('/api/fat-finger', { clientId });
   }
 
   async snapshot(clientId: string): Promise<DeskSnapshot> {
-    // The before-world has no Confluent in it. Nothing is queried, and nothing pretends.
-    if (this.mode === 'before') return this.fallback.snapshot(clientId);
-
     const res = await this.doFetch(
       `${this.base}/api/snapshot?client=${encodeURIComponent(clientId)}&isolation=${this.isolation}`,
       { headers: this.headers() },
     );
     if (!res.ok) throw new Error(`snapshot failed: ${res.status}`);
     const wire = (await res.json()) as WireSnapshot;
+    // The before-world is a script over the live truth: what anyone was told comes from last
+    // night's copy, and what was really so comes from Confluent.
+    if (this.mode === 'before') return beforeSnapshot(clientId, wire, Date.now(), this.isolation);
     return this.toSnapshot(clientId, wire, this.pendingFor(clientId, wire.served.asOfMs));
   }
 

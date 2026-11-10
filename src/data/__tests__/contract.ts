@@ -159,7 +159,7 @@ export function runContract(h: Harness): void {
       const { escalations } = await source.snapshot(FOLLOWED);
       expect(escalations.length).toBeGreaterThan(0);
       for (const e of escalations) {
-        expect(['risk-agent', 'threshold-check', 'simulator']).toContain(e.author);
+        expect(['risk-agent', 'threshold-check', 'simulator', 'scripted']).toContain(e.author);
       }
     });
   });

@@ -27,11 +27,9 @@ export default function App() {
         snapshot={s}
         selected={desk.client}
         autoFollowing={desk.autoFollowing}
-        which={desk.which}
         mode={desk.mode}
         isolation={desk.isolation}
         onMode={desk.setMode}
-        onWhich={desk.setWhich}
         onClient={desk.setClient}
         onFill={() => void desk.fill(DEFAULT_FILL_LOTS)}
         onFatFinger={() => void desk.fatFinger()}

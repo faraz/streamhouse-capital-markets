@@ -4,7 +4,6 @@ import DecryptedText from '../reactbits/DecryptedText';
 import Aurora from '../reactbits/Aurora';
 import ClickSpark from '../reactbits/ClickSpark';
 import type { DeskSnapshot, Isolation, Mode } from '../data/types';
-import type { Which } from '../useDesk';
 import { PALETTE, age, freshness, money, wallClock } from './format';
 import { FALSE_BLOCK, FOLLOWED } from '../data/book';
 
@@ -18,11 +17,9 @@ interface Props {
   snapshot: DeskSnapshot;
   selected: string;
   autoFollowing: boolean;
-  which: Which;
   mode: Mode;
   isolation: Isolation;
   onMode(m: Mode): void;
-  onWhich(w: Which): void;
   onClient(c: string): void;
   onFill(): void;
   onFatFinger(): void;
@@ -105,15 +102,6 @@ export function Masthead(p: Props) {
             </button>
           </div>
 
-          <div className="seg" role="group" aria-label="Data source">
-            <button type="button" aria-pressed={p.which === 'live'} onClick={() => p.onWhich('live')}>
-              Live
-            </button>
-            <button type="button" aria-pressed={p.which === 'simulator'} onClick={() => p.onWhich('simulator')}>
-              Simulator
-            </button>
-          </div>
-
           <div className="seg" role="group" aria-label="The two clients in the story">
             <button
               type="button"
@@ -133,19 +121,21 @@ export function Masthead(p: Props) {
             </button>
           </div>
 
-          <button type="button" className="ghost" onClick={p.onFill}>
+          {/* The before-world hears about trades overnight, so neither event exists in it. */}
+          <button type="button" className="ghost" disabled={!live} onClick={p.onFill}>
             A fill arrives
           </button>
-          <button type="button" className="ghost" onClick={p.onFatFinger}>
+          <button type="button" className="ghost" disabled={!live} onClick={p.onFatFinger}>
             Send a fat finger
           </button>
           <button type="button" className="ghost" disabled={!p.canReset} onClick={p.onReset}>
             Reset
           </button>
 
-          <span className="origin" data-origin={s.origin}>
+          {/* Before is a script over the live truth, and the badge says both halves. */}
+          <span className="origin" data-origin={live ? s.origin : 'scripted'}>
             <i />
-            {s.origin === 'confluent' ? 'live confluent' : 'simulator'}
+            {!live ? 'scripted / truth live' : s.origin === 'confluent' ? 'live confluent' : 'simulator'}
           </span>
         </div>
       </ClickSpark>

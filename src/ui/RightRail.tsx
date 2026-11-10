@@ -17,6 +17,7 @@ const AUTHOR: Record<EscalationAuthor, string> = {
   'risk-agent': 'Risk agent',
   'threshold-check': 'Threshold check',
   simulator: 'Simulator',
+  scripted: 'Scripted',
 };
 
 export function Escalations({ snapshot }: { snapshot: DeskSnapshot }) {

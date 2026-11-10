@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { DeskSnapshot, ExposureSource, Isolation, Mode } from './data/types';
+import type { DeskSnapshot, Isolation, Mode } from './data/types';
 import { LiveSource } from './data/live';
-import { Simulator } from './data/simulator';
 import { FOLLOWED } from './data/book';
+import { age } from './ui/format';
 
 const POLL_MS = 2_000;
 /** Below this a client's exposure is too small to say anything about on stage. */
@@ -18,24 +18,22 @@ const STALE_REFOLLOW_MS = 300_000;
 const RESET_LANDS_MS = 120_000;
 const GATE = import.meta.env['VITE_DEMO_GATE'] ?? 'local-dev';
 
-export type Which = 'live' | 'simulator';
-
 /**
- * Holds the one seam the screen talks to. Polls while the tab is visible only: the free
- * hosting tier allows 100,000 requests a day and a rehearsal left open would spend it on
- * an empty room.
+ * Holds the one seam the screen talks to, the live stack. Polls while the tab is visible
+ * only: the free hosting tier allows 100,000 requests a day and a rehearsal left open would
+ * spend it on an empty room.
  *
- * A failed live call falls back to the simulator rather than showing a broken screen,
- * and the screen always says which one answered.
+ * A failed call keeps the last live snapshot on screen and says how long ago it was current,
+ * rather than switching to anything that did not come from Confluent.
  */
 export function useDesk() {
   const started = useRef(Date.now());
   const clock = useCallback(() => Date.now() - started.current, []);
 
-  const simulator = useMemo(() => new Simulator({ clock, clientCount: 4000 }), [clock]);
-  const live = useMemo(() => new LiveSource({ clock, gate: GATE, clientCount: 4000 }), [clock]);
+  const source = useMemo(() => new LiveSource({ clock, gate: GATE }), [clock]);
+  /** When the screen last had a live answer, so a failure can say how stale it is. */
+  const lastGood = useRef<number | null>(null);
 
-  const [which, setWhich] = useState<Which>('live');
   const [client, setClientState] = useState(FOLLOWED);
   // Follow whoever traded most recently, once, on arriving in the live world. Following
   // the freshest client on every poll would move the screen every two seconds under the
@@ -55,12 +53,11 @@ export function useDesk() {
   const resetAt = useRef<number | null>(null);
   const resetLanding = () => resetAt.current !== null && Date.now() - resetAt.current < RESET_LANDS_MS;
 
-  const source: ExposureSource = which === 'live' ? live : simulator;
-
   const refresh = useCallback(async () => {
     if (document.hidden) return;
     try {
       const snap = await source.snapshot(client);
+      lastGood.current = Date.now();
       setSnapshot(snap);
       setNote(resetLanding() && snap.origin === 'confluent'
         ? 'Reset sent. The presenter fills are offset at the next commit, about 90 seconds.'
@@ -73,20 +70,13 @@ export function useDesk() {
       }
       if (live) pickFreshest.current = false;
     } catch (e) {
-      // Fall back for this render only, and keep trying. Latching the toggle to the
-      // simulator meant one blip while the server was starting left the screen
-      // permanently simulated, with the presenter none the wiser.
-      if (which === 'live') {
-        try {
-          const fallback = await simulator.snapshot(client);
-          setSnapshot(fallback);
-          setNote(`live source unreachable, showing the simulator: ${e instanceof Error ? e.message : e}`);
-        } catch {
-          setNote('neither source answered');
-        }
-      }
+      // Keep what is on screen and keep trying: the next poll that answers clears this.
+      const why = e instanceof Error ? e.message : String(e);
+      setNote(lastGood.current === null
+        ? `The live stack is not answering (${why}).`
+        : `The live stack is not answering (${why}). These figures are its last answer, ${age(Date.now() - lastGood.current)} ago.`);
     }
-  }, [source, simulator, client, which]);
+  }, [source, client]);
 
   useEffect(() => {
     void source.setMode(mode);
@@ -107,11 +97,9 @@ export function useDesk() {
   return {
     snapshot,
     note,
-    which,
     client,
     mode,
     isolation,
-    setWhich,
     autoFollowing: autoFollow.current,
     // A reset offsets only what has landed, so a second press before the first lands, or a
     // press while a fill is in flight, would offset the wrong amount. Re-read every poll.

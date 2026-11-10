@@ -282,7 +282,7 @@
   padding: 4px 9px; border-radius: 3px; border: 1px solid var(--edge);
 }
 .origin[data-origin="confluent"] { color: var(--mint); border-color: rgba(99, 230, 174, 0.5); }
-.origin[data-origin="simulator"] { color: var(--amber); border-color: rgba(255, 194, 75, 0.5); }
+.origin[data-origin="simulator"], .origin[data-origin="scripted"] { color: var(--amber); border-color: rgba(255, 194, 75, 0.5); }
 .origin i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: 0 0 auto; }
 
 .askbox { display: flex; gap: 8px; }

@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import SpotlightCard from '../reactbits/SpotlightCard';
 import TextType from '../reactbits/TextType';
 import type { DeskSnapshot } from '../data/types';
-import { PALETTE } from './format';
+import { PALETTE, age, money, wallClock } from './format';
 
 export interface Step {
   kind: 'ask' | 'tool' | 'result' | 'answer' | 'error';
@@ -21,6 +21,48 @@ const questionsFor = (client: string) => [
 ];
 
 const GATE = import.meta.env['VITE_DEMO_GATE'] ?? 'local-dev';
+
+const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * The analyst in the before-world. There is no MCP and no live table to connect it to, so it
+ * reads the copy that was loaded overnight, and that is scripted: the six legacy systems do
+ * not exist. What was really true is not. It is the live figure, from the snapshot, so the
+ * correction the room hears is Confluent's number.
+ */
+function beforeSteps(s: DeskSnapshot): Step[] {
+  const { clientId, exposureUsd, limitUsd, limitUtilPct, asOf } = s.served;
+  const truePct = (s.trueExposureUsd / limitUsd) * 100;
+  const readHigh = exposureUsd > s.trueExposureUsd;
+  return [
+    {
+      kind: 'tool',
+      tag: 'Read',
+      meta: 'overnight copy',
+      code: `SELECT client_id, exposure_usd, limit_usd, as_of\nFROM nightly_copy\nWHERE client_id = '${clientId}'`,
+    },
+    {
+      kind: 'result',
+      tag: 'Result',
+      meta: 'overnight copy',
+      code: `client_id     ${clientId}\nexposure_usd  ${money(exposureUsd)}\nlimit_usd     ${money(limitUsd)}\nas_of         ${wallClock(asOf)}, a day ago`,
+    },
+    {
+      kind: 'answer',
+      tag: 'Answer',
+      meta: `the number is ${age(s.clocks.servedAgeMs)} old`,
+      body: `Client ${clientId} is at ${limitUtilPct.toFixed(1)}% of its limit, with $${money(limitUsd - exposureUsd)} of headroom. ${limitUtilPct >= 95 ? 'New trades should be refused.' : 'No action needed.'}`,
+    },
+    {
+      kind: 'error',
+      tag: 'What was true',
+      meta: readHigh ? 'the false block' : 'the breach',
+      body: readHigh
+        ? `Exposure was actually $${money(s.trueExposureUsd)}, or ${truePct.toFixed(1)}% of the limit, read live from Confluent. The copy read high, so a good trade would have been refused.`
+        : `Exposure was actually $${money(s.trueExposureUsd)}, or ${truePct.toFixed(1)}% of the limit, read live from Confluent. The analyst answered from last night's file, and nothing escalated.`,
+    },
+  ];
+}
 
 /**
  * The star of the demo. The engine exposes three generic tools and no mechanism for a
@@ -44,6 +86,17 @@ export function AgentPanel({ snapshot }: { snapshot: DeskSnapshot }) {
     setBusy(true);
     const collected: Step[] = [{ kind: 'ask', tag: 'Asked', body: q }];
     setSteps([...collected]);
+
+    if (!live) {
+      // Paced like a tool call returning, so the wrong answer lands with the same confidence.
+      for (const step of beforeSteps(snapshot)) {
+        await pause(step.kind === 'error' ? 2_400 : 600);
+        collected.push(step);
+        setSteps([...collected]);
+      }
+      setBusy(false);
+      return;
+    }
 
     try {
       const res = await fetch('/api/ask', {
@@ -82,7 +135,7 @@ export function AgentPanel({ snapshot }: { snapshot: DeskSnapshot }) {
     } finally {
       setBusy(false);
     }
-  }, [busy]);
+  }, [busy, live, snapshot]);
 
   return (
     <SpotlightCard
