@@ -1,0 +1,10 @@
+{
+  "type": "record", "name": "MqIntraday", "namespace": "demo.raw",
+  "fields": [
+    { "name": "acct", "type": "string" },
+    { "name": "sym", "type": "string" },
+    { "name": "qty", "type": "int" },
+    { "name": "px", "type": "double" },
+    { "name": "ts", "type": "string" }
+  ]
+}

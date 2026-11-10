@@ -1,0 +1,12 @@
+{
+  "type": "record", "name": "ClientExposure", "namespace": "demo",
+  "doc": "Current exposure per client, kept continuously by Flink. Query by client_id for one client, or ORDER BY limit_util_pct DESC for the book.",
+  "fields": [
+    { "name": "client_id", "type": "string" },
+    { "name": "exposure_usd", "type": "double" },
+    { "name": "limit_usd", "type": "double" },
+    { "name": "limit_util_pct", "type": "double" },
+    { "name": "as_of", "type": { "type": "long", "logicalType": "timestamp-millis" } },
+    { "name": "last_source", "type": "string" }
+  ]
+}

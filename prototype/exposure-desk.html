@@ -1,0 +1,831 @@
+<title>Exposure Desk</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap">
+<style>
+  /* Layout: masthead, then the normalize lane (six shapes into one record), then the
+     agent on RTCE as the main event, with escalations and the three clocks beside it. */
+  :root {
+    --ink: #03050C;
+    --panel: #090E20;
+    --raise: #101936;
+    --paper: #F3F6FC;
+    --mist: #A9B7D9;
+    --cobalt: #8FB0FF;
+    --mint: #63E6AE;
+    --alert: #FF5A4E;
+    --amber: #FFC24B;
+    --sand: #E8D5B0;
+    --edge: rgba(255, 255, 255, 0.13);
+    --edge-soft: rgba(255, 255, 255, 0.07);
+    --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ink);
+    color: var(--paper);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+    position: relative;
+    overflow-x: hidden;
+  }
+
+  body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(58% 48% at 10% 0%, rgba(59, 102, 240, 0.24), transparent 70%),
+      radial-gradient(48% 42% at 94% 6%, rgba(36, 67, 184, 0.18), transparent 72%);
+  }
+
+  .wrap {
+    position: relative;
+    z-index: 1;
+    max-width: 1720px;
+    margin: 0 auto;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 26px 52px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  .lbl {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    color: var(--mist);
+  }
+  .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+  /* ---------- masthead ---------- */
+  .mast { display: flex; flex-direction: column; gap: 15px; }
+  .mast-top { display: flex; flex-wrap: wrap; gap: 14px 24px; align-items: baseline; justify-content: space-between; }
+
+  h1 {
+    font-size: clamp(24px, 3.1vw, 40px);
+    font-weight: 700; letter-spacing: -0.028em; line-height: 1.1;
+    margin: 0; text-wrap: balance; max-width: 24ch;
+  }
+  h1 em { font-style: normal; color: var(--cobalt); }
+
+  .wall { display: flex; flex-direction: column; gap: 3px; align-items: flex-end; }
+  .wall-time { font-family: var(--mono); font-size: 24px; font-weight: 500; font-variant-numeric: tabular-nums; }
+
+  .controls { display: flex; flex-wrap: wrap; gap: 9px; align-items: center; }
+
+  .seg { display: inline-flex; border: 1px solid var(--edge); border-radius: 4px; overflow: hidden; background: var(--panel); }
+  .seg button {
+    font-family: var(--mono); font-size: 11px; font-weight: 600; letter-spacing: 0.09em;
+    text-transform: uppercase; color: var(--mist); background: transparent; border: 0;
+    padding: 9px 14px; cursor: pointer; transition: background-color 120ms ease, color 120ms ease;
+  }
+  .seg button + button { border-left: 1px solid var(--edge-soft); }
+  .seg button:hover { color: var(--paper); background: rgba(243, 246, 252, 0.06); }
+  .seg button[aria-pressed="true"] { background: var(--cobalt); color: var(--ink); }
+  .seg button:focus-visible { outline: 2px solid var(--paper); outline-offset: -2px; }
+  .seg button:disabled { opacity: 0.32; cursor: default; }
+
+  .ghost {
+    font-family: var(--mono); font-size: 11px; font-weight: 600; letter-spacing: 0.09em;
+    text-transform: uppercase; color: var(--mist); background: transparent;
+    border: 1px solid var(--edge); border-radius: 4px; padding: 9px 14px; cursor: pointer;
+    transition: color 120ms ease, border-color 120ms ease;
+  }
+  .ghost:hover { color: var(--paper); border-color: var(--paper); }
+  .ghost:focus-visible { outline: 2px solid var(--paper); outline-offset: 2px; }
+  .ghost[data-hot="true"] { color: var(--amber); border-color: rgba(255, 194, 75, 0.55); }
+
+  /* ---------- panels ---------- */
+  .panel {
+    background: var(--panel); border: 1px solid var(--edge); border-radius: 6px;
+    padding: 18px 20px 20px; display: flex; flex-direction: column; gap: 15px; min-width: 0;
+  }
+  .panel-head { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: baseline; justify-content: space-between; }
+  .panel-title { font-size: 16px; font-weight: 600; letter-spacing: -0.012em; }
+  .panel-note { font-size: 13px; color: var(--mist); line-height: 1.45; max-width: 80ch; }
+  .panel-note strong { color: var(--paper); font-weight: 600; }
+
+  /* ---------- normalize lane ---------- */
+  .norm { display: grid; grid-template-columns: minmax(0, 1.25fr) auto minmax(0, 1fr); gap: 18px; align-items: start; }
+  @media (max-width: 1000px) { .norm { grid-template-columns: minmax(0, 1fr); } .chev { display: none; } }
+
+  .shapes { display: flex; flex-direction: column; gap: 1px; background: var(--edge-soft); border: 1px solid var(--edge); border-radius: 4px; overflow: hidden; }
+  .shape {
+    background: var(--ink); padding: 9px 12px; display: grid;
+    grid-template-columns: minmax(0, 9.5rem) minmax(0, 1fr); gap: 12px; align-items: center;
+    position: relative; transition: background-color 400ms ease;
+  }
+  .shape[data-hit="true"] { background: #141D42; }
+  .shape[data-reject="true"] { background: #1A0D11; }
+  .shape[data-reject="true"]::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 2px; background: var(--alert); }
+  .shape-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .shape-n { font-size: 12.5px; font-weight: 600; letter-spacing: -0.005em; }
+  .shape-k { font-family: var(--mono); font-size: 10px; letter-spacing: 0.05em; color: var(--mist); text-transform: uppercase; }
+  .shape-raw {
+    font-family: var(--mono); font-size: 11px; color: var(--sand);
+    overflow-x: auto; white-space: nowrap; min-width: 0; padding-bottom: 1px;
+  }
+  .shape[data-reject="true"] .shape-raw { color: var(--alert); }
+
+  .chev { align-self: center; display: flex; flex-direction: column; align-items: center; gap: 6px; color: var(--cobalt); }
+  .chev svg { display: block; }
+  .chev .lbl { color: var(--cobalt); writing-mode: horizontal-tb; }
+
+  .record {
+    font-family: var(--mono); font-size: 12px; line-height: 1.75;
+    background: var(--ink); border: 1px solid var(--edge); border-radius: 4px;
+    padding: 13px 15px; overflow-x: auto;
+  }
+  .record .k { color: var(--mist); }
+  .record .s { color: var(--mint); }
+  .record .n2 { color: var(--cobalt); }
+  .record .enc { color: var(--amber); }
+  .record .cmt { color: var(--mist); opacity: 0.75; }
+
+  .gov { display: flex; flex-wrap: wrap; gap: 7px; }
+  .chip {
+    font-family: var(--mono); font-size: 10px; font-weight: 600; letter-spacing: 0.08em;
+    text-transform: uppercase; padding: 5px 9px; border-radius: 3px;
+    border: 1px solid var(--edge); color: var(--mist); background: var(--raise);
+  }
+  .chip[data-on="true"] { color: var(--mint); border-color: rgba(99, 230, 174, 0.45); }
+  .chip[data-on="dlq"] { color: var(--alert); border-color: rgba(255, 90, 78, 0.45); }
+  .chip[data-on="enc"] { color: var(--amber); border-color: rgba(255, 194, 75, 0.45); }
+
+  /* ---------- main grid ---------- */
+  .main { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+  @media (max-width: 1060px) { .main { grid-template-columns: minmax(0, 1fr); } }
+
+  /* the agent, the main event */
+  .agent { border-color: rgba(143, 176, 255, 0.4); box-shadow: 0 0 44px rgba(72, 118, 255, 0.11); }
+
+  .asks { display: flex; flex-wrap: wrap; gap: 8px; }
+  .ask {
+    font-size: 13px; font-weight: 500; text-align: left; color: var(--paper);
+    background: var(--raise); border: 1px solid var(--edge); border-radius: 4px;
+    padding: 9px 12px; cursor: pointer; transition: border-color 120ms ease, background-color 120ms ease;
+    max-width: 100%;
+  }
+  .ask:hover { border-color: var(--cobalt); background: #141D42; }
+  .ask:disabled { opacity: 0.4; cursor: default; }
+  .ask:focus-visible { outline: 2px solid var(--paper); outline-offset: 2px; }
+
+  .tape {
+    display: flex; flex-direction: column; gap: 1px;
+    background: var(--edge-soft); border: 1px solid var(--edge); border-radius: 4px;
+    overflow: hidden; min-height: 290px;
+  }
+  .tape-empty {
+    background: var(--ink); padding: 26px 18px; text-align: center;
+    display: flex; flex-direction: column; gap: 7px; align-items: center;
+  }
+  .tape-empty .lbl { color: var(--mist); }
+  .tape-empty p { margin: 0; font-size: 13.5px; color: var(--mist); max-width: 46ch; line-height: 1.5; }
+
+  .step { background: var(--ink); padding: 11px 14px; display: flex; flex-direction: column; gap: 6px; animation: rise 260ms ease both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: translateY(0); } }
+
+  .step-top { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; }
+  .step-kind {
+    font-family: var(--mono); font-size: 9.5px; font-weight: 700; letter-spacing: 0.1em;
+    text-transform: uppercase; padding: 3px 7px; border-radius: 3px; flex: 0 0 auto;
+  }
+  .step[data-kind="ask"] .step-kind { background: var(--cobalt); color: var(--ink); }
+  .step[data-kind="tool"] .step-kind { background: var(--raise); color: var(--cobalt); border: 1px solid rgba(143, 176, 255, 0.4); }
+  .step[data-kind="result"] .step-kind { background: var(--raise); color: var(--mist); border: 1px solid var(--edge); }
+  .step[data-kind="answer"] .step-kind { background: var(--mint); color: var(--ink); }
+  .step[data-kind="wrong"] .step-kind { background: var(--alert); color: var(--ink); }
+  .step[data-kind="act"] .step-kind { background: var(--amber); color: var(--ink); }
+
+  .step-body { font-size: 13.5px; line-height: 1.5; min-width: 0; }
+  .step-body strong { font-weight: 600; }
+  .step[data-kind="answer"] .step-body strong { color: var(--mint); }
+  .step[data-kind="wrong"] .step-body strong { color: var(--alert); }
+  .step-code {
+    font-family: var(--mono); font-size: 11.5px; line-height: 1.6; color: var(--sand);
+    overflow-x: auto; white-space: pre; min-width: 0;
+  }
+  .step-code .kw { color: var(--cobalt); }
+  .step-meta { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.04em; color: var(--mist); }
+
+  .thinking { display: inline-flex; gap: 4px; align-items: center; }
+  .thinking i { width: 5px; height: 5px; border-radius: 50%; background: var(--cobalt); animation: blink 1s infinite; }
+  .thinking i:nth-child(2) { animation-delay: 0.16s; }
+  .thinking i:nth-child(3) { animation-delay: 0.32s; }
+  @keyframes blink { 0%, 100% { opacity: 0.25; } 50% { opacity: 1; } }
+
+  /* right rail */
+  .rail-col { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+
+  .esc { display: flex; flex-direction: column; gap: 1px; background: var(--edge-soft); border: 1px solid var(--edge); border-radius: 4px; overflow: hidden; }
+  .esc-row { background: var(--ink); padding: 10px 13px; display: flex; flex-direction: column; gap: 4px; animation: rise 260ms ease both; }
+  .esc-row[data-tone="warn"] { box-shadow: inset 2px 0 0 var(--amber); }
+  .esc-row[data-tone="bad"] { box-shadow: inset 2px 0 0 var(--alert); background: #14090C; }
+  .esc-who { font-family: var(--mono); font-size: 10px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: var(--mist); }
+  .esc-what { font-size: 13px; line-height: 1.45; }
+  .esc-none { background: var(--ink); padding: 18px 13px; font-size: 13px; color: var(--mist); text-align: center; }
+
+  .clocks { display: flex; flex-direction: column; gap: 1px; background: var(--edge-soft); border: 1px solid var(--edge); border-radius: 4px; overflow: hidden; }
+  .clk { background: var(--ink); padding: 11px 13px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+  .clk-who { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .clk-n { font-size: 12.5px; font-weight: 600; }
+  .clk-k { font-family: var(--mono); font-size: 10px; letter-spacing: 0.04em; color: var(--mist); }
+  .clk-age { font-family: var(--mono); font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
+  .clk[data-tone="fresh"] .clk-age { color: var(--mint); }
+  .clk[data-tone="warn"] .clk-age { color: var(--amber); }
+  .clk[data-tone="stale"] .clk-age { color: var(--alert); }
+
+  .meter { display: flex; flex-direction: column; gap: 6px; }
+  .meter-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+  .meter-track { height: 7px; border-radius: 4px; background: rgba(255, 255, 255, 0.09); overflow: hidden; position: relative; }
+  .meter-fill { height: 100%; border-radius: 4px; background: var(--cobalt); transition: width 500ms cubic-bezier(0.22, 1, 0.36, 1), background-color 300ms ease; }
+  .meter-fill[data-over="true"] { background: var(--alert); }
+  .meter-true { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--paper); transition: left 500ms cubic-bezier(0.22, 1, 0.36, 1); }
+  .meter-pct { font-family: var(--mono); font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  .foot { border-top: 1px solid var(--edge-soft); padding-top: 15px; display: flex; flex-wrap: wrap; gap: 10px 20px; align-items: baseline; justify-content: space-between; }
+  .accel { font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink); background: var(--amber); padding: 3px 7px; border-radius: 3px; }
+
+  @media (max-width: 560px) {
+    .wall { align-items: flex-start; }
+    .mast-top { flex-direction: column; }
+    .shape { grid-template-columns: minmax(0, 1fr); gap: 5px; }
+  }
+</style>
+
+<div class="wrap">
+  <header class="mast">
+    <div class="mast-top">
+      <h1>One governed record, and an agent that can <em>ask anything</em></h1>
+      <div class="wall">
+        <span class="lbl">Trading day / wall clock</span>
+        <span class="wall-time" id="wall">14:06:22</span>
+        <span class="lbl" id="client-line">Client 4417 / limit 450,000,000</span>
+      </div>
+    </div>
+    <div class="controls">
+      <div class="seg" role="group" aria-label="Architecture">
+        <button type="button" id="m-before" aria-pressed="false">Before</button>
+        <button type="button" id="m-stream" aria-pressed="true">Streamhouse</button>
+      </div>
+      <div class="seg" role="group" aria-label="Isolation level">
+        <button type="button" id="iso-c" aria-pressed="true">Exactly once</button>
+        <button type="button" id="iso-u" aria-pressed="false">Read uncommitted</button>
+      </div>
+      <button type="button" class="ghost" id="fill">A fill arrives</button>
+      <button type="button" class="ghost" id="fat">Send a fat finger</button>
+      <button type="button" class="ghost" id="speed">Speed 1&times;</button>
+      <button type="button" class="ghost" id="reset">Reset</button>
+    </div>
+  </header>
+
+  <!-- ===== Connect and Govern: six shapes into one record ===== -->
+  <section class="panel">
+    <div class="panel-head">
+      <span class="panel-title">Connect and Govern / six systems, six shapes, one record</span>
+      <span class="lbl" id="norm-count">Normalizing</span>
+    </div>
+    <div class="norm">
+      <div class="shapes" id="shapes"></div>
+      <div class="chev" aria-hidden="true">
+        <svg width="34" height="18" viewBox="0 0 34 18" fill="none"><path d="M1 9h27" stroke="currentColor" stroke-width="1.4"/><path d="M26 3l6 6-6 6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="lbl">Connect</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px;min-width:0">
+        <div class="record" id="record"></div>
+        <div class="gov" id="gov"></div>
+      </div>
+    </div>
+    <p class="panel-note" id="norm-note"></p>
+  </section>
+
+  <!-- ===== the agent on RTCE, and the evidence beside it ===== -->
+  <div class="main">
+    <section class="panel agent">
+      <div class="panel-head">
+        <span class="panel-title">The risk agent / asking over MCP through the Real-Time Context Engine</span>
+        <span class="lbl" id="agent-conn">Connected</span>
+      </div>
+      <div class="asks" id="asks"></div>
+      <div class="tape" id="tape"></div>
+      <p class="panel-note" id="agent-note"></p>
+    </section>
+
+    <div class="rail-col">
+      <section class="panel">
+        <div class="panel-head">
+          <span class="panel-title">Escalations</span>
+          <span class="lbl">Flink streaming agent</span>
+        </div>
+        <div class="esc" id="esc"></div>
+        <p class="panel-note">The agent never touches an order. It gets a person there in time.</p>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <span class="panel-title">How old the answer is</span>
+          <span class="lbl">Three clocks</span>
+        </div>
+        <div class="clocks" id="clocks"></div>
+        <div class="meter" id="limit-meter"></div>
+        <p class="panel-note" id="iso-note"></p>
+      </section>
+    </div>
+  </div>
+
+  <footer class="foot">
+    <span class="lbl">Capital markets / exposure across desks, venues, custodians and entities</span>
+    <span class="lbl" id="foot-note">Figures are illustrative. No client, venue or custodian is named.</span>
+  </footer>
+</div>
+
+<script>
+  "use strict";
+
+  var BOOK = [
+    { id: 2286, limit: 120e6, exposure: 112.8e6 },
+    { id: 8803, limit: 300e6, exposure: 271.5e6 },
+    { id: 6154, limit: 250e6, exposure: 216.0e6 },
+    { id: 4417, limit: 450e6, exposure: 364300640 },
+    { id: 7405, limit: 80e6, exposure: 61.6e6 },
+    { id: 9021, limit: 500e6, exposure: 371.0e6 },
+    { id: 3318, limit: 200e6, exposure: 141.2e6 },
+    { id: 5560, limit: 150e6, exposure: 101.3e6 }
+  ];
+
+  var CLIENT = 4417;
+  var STALE = 306.2e6;        // what last night's file says
+  var FILL_SIZE = 18.4e6;
+  var FLINK_COMMIT = 60;
+  var ICEBERG_SNAP = 300;
+  var START = 14 * 3600 + 6 * 60 + 22;
+
+  // Six sources, as they actually arrive. The point of the lane is that no two agree
+  // on shape, and only one of them carries a time.
+  var SOURCES = [
+    { n: "Intraday feed", k: "Messages on MQ", raw: "MSG|ACCT=4417|SYM=ESU6|QTY=+240|PX=5412.25|TS=14:06:19", age: 2 },
+    { n: "Venue", k: "Loose fields, no time", raw: '{"acct":"4417","sym":"ESU6","q":240,"p":5412.25}', age: 7560 },
+    { n: "Desk spreadsheet", k: "Typed cells", raw: "4417,ESU6,240,5412.25", age: 11400 },
+    { n: "Custodial file", k: "Fixed-width columns", raw: "4417      ESU6      000240  005412250", age: 29160 },
+    { n: "Clearing statement", k: "Printed total", raw: "TOTAL DUE        364,300,640.00", age: 93600 },
+    { n: "Position file", k: "Nightly extract / mainframe", raw: "4417|ESU6|240|5412.25|2026-11-08T22:00:00", age: 57960 }
+  ];
+
+  var state = {
+    mode: "streamhouse",
+    isolation: "committed",
+    speed: 1,
+    t: 0,
+    fillAt: null,
+    lastCommit: 0,
+    lastSnap: 0,
+    committed: 0,
+    snapped: 0,
+    hit: -1,
+    reject: false,
+    steps: [],
+    esc: [],
+    busy: false,
+    escalated: false,
+    timers: []
+  };
+
+  function $(id) { return document.getElementById(id); }
+  function money(n) { return Math.round(n).toLocaleString("en-US"); }
+  function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+  function clock(sec) {
+    var s = Math.floor(sec) % 86400;
+    return String(Math.floor(s / 3600)).padStart(2, "0") + ":" +
+      String(Math.floor((s % 3600) / 60)).padStart(2, "0") + ":" +
+      String(s % 60).padStart(2, "0");
+  }
+
+  function age(sec) {
+    if (sec < 1) return "&lt;100ms";
+    sec = Math.max(0, Math.floor(sec));
+    if (sec < 60) return sec + "s";
+    if (sec < 3600) return Math.floor(sec / 60) + "m " + (sec % 60) + "s";
+    if (sec < 86400) return Math.floor(sec / 3600) + "h " + Math.floor((sec % 3600) / 60) + "m";
+    return Math.floor(sec / 86400) + "d " + Math.floor((sec % 86400) / 3600) + "h";
+  }
+
+  function tone(sec) { return sec < 90 ? "fresh" : sec < 600 ? "warn" : "stale"; }
+
+  function row() { return BOOK.filter(function (r) { return r.id === CLIENT; })[0]; }
+  function trueExposure() { return row().exposure + (state.fillAt === null ? 0 : FILL_SIZE); }
+  function servedNow() {
+    if (state.mode === "before") return STALE;
+    // Reading uncommitted goes to the changelog, so a fill lands before Flink commits.
+    var extra = state.isolation === "uncommitted" && state.fillAt !== null ? FILL_SIZE : state.committed;
+    return row().exposure + extra;
+  }
+  function servedAge() {
+    if (state.mode === "before") return SOURCES[5].age + state.t;
+    if (state.isolation === "uncommitted") return 0.08;
+    return state.t - state.lastCommit;
+  }
+
+  function later(fn, ms) { state.timers.push(setTimeout(fn, ms / state.speed)); }
+  function clearLater() { state.timers.forEach(clearTimeout); state.timers = []; }
+
+  /* ---------- Connect and Govern ---------- */
+  function renderNorm() {
+    $("shapes").innerHTML = SOURCES.map(function (s, i) {
+      return '<div class="shape" data-hit="' + (state.hit === i ? "true" : "false") + '" data-reject="false">' +
+        '<span class="shape-name"><span class="shape-n">' + s.n + '</span><span class="shape-k">' + s.k + "</span></span>" +
+        '<span class="shape-raw">' + esc(s.raw) + "</span>" +
+        "</div>";
+    }).join("") + (state.reject
+      ? '<div class="shape" data-reject="true">' +
+          '<span class="shape-name"><span class="shape-n">Intraday feed</span><span class="shape-k">Rejected by a Flink guard</span></span>' +
+          '<span class="shape-raw">MSG|ACCT=4417|SYM=ESU6|QTY=+2400000|PX=5412.25 &rarr; positions.dlq</span>' +
+        "</div>"
+      : "");
+
+    var cdc = state.mode === "streamhouse";
+    $("record").innerHTML =
+      '<span class="k">client_id</span>    <span class="s">"4417"</span>\n' +
+      '<span class="k">symbol</span>       <span class="s">"ESU6"</span>\n' +
+      '<span class="k">quantity</span>     <span class="n2">240</span>\n' +
+      '<span class="k">price</span>        <span class="n2">5412.25</span>\n' +
+      '<span class="k">event_time</span>   <span class="s">"2026-11-09T14:06:19Z"</span>\n' +
+      '<span class="k">source</span>       <span class="s">' + (cdc ? '"book_of_record.changes"' : '"nightly.extract"') + "</span>\n" +
+      '<span class="k">age_ms</span>       <span class="' + (cdc ? "n2" : "") + '" style="' + (cdc ? "" : "color:var(--alert)") + '">' +
+        (cdc ? "2140" : "57960000") + "</span>  <span class=\"cmt\">// the record knows how old it is</span>";
+
+    $("gov").innerHTML = [
+      ['Schema contract v2', "true"],
+      ['Flink validation / quantity', state.reject ? "dlq" : "true"],
+      ['Lineage / last 10 minutes', "true"],
+      ['Governance Essentials', "true"],
+      [cdc ? 'Change data capture' : 'Nightly extract only', cdc ? "true" : "false"]
+    ].map(function (c) {
+      return '<span class="chip" data-on="' + c[1] + '">' + c[0] + "</span>";
+    }).join("");
+
+    $("norm-count").textContent = cdc ? "6 sources / 1 schema / live" : "6 sources / 1 schema / nightly";
+    $("norm-note").innerHTML = cdc
+      ? "Connect turns whatever arrived into one fact with a key, a time and its own age. The position file is read at source by change data capture, so the stalest input is <strong>seconds</strong> old instead of a night old. Everything after this reads one thing instead of six."
+      : "Without change data capture the book of record is only read by tonight's extract, so the normalized record is <strong>" +
+        age(SOURCES[5].age + state.t) + "</strong> old before anyone queries it. Same schema, stale content.";
+  }
+
+  /* ---------- the agent ---------- */
+  var QUESTIONS = [
+    { id: "exposure", q: "What is client 4417's exposure right now, across everything?" },
+    { id: "book", q: "Which clients are nearest their limit?" },
+    { id: "changed", q: "Did anything just change for 4417?" }
+  ];
+
+  function renderAsks() {
+    $("asks").innerHTML = QUESTIONS.map(function (q) {
+      return '<button type="button" class="ask" data-q="' + q.id + '"' + (state.busy ? " disabled" : "") + ">" + esc(q.q) + "</button>";
+    }).join("");
+    Array.prototype.forEach.call(document.querySelectorAll(".ask"), function (b) {
+      b.addEventListener("click", function () { runAsk(b.getAttribute("data-q")); });
+    });
+  }
+
+  function renderTape() {
+    if (!state.steps.length) {
+      $("tape").innerHTML = '<div class="tape-empty">' +
+        '<span class="lbl">Real-Time Context Engine / MCP</span>' +
+        "<p>Three tools are on the connection: listTopics, getMetadata and queryData. Ask a question and the agent will pick its own way to the answer.</p>" +
+        "</div>";
+      return;
+    }
+    $("tape").innerHTML = state.steps.map(function (s) {
+      return '<div class="step" data-kind="' + s.kind + '">' +
+        '<div class="step-top"><span class="step-kind">' + s.tag + "</span>" +
+        (s.meta ? '<span class="step-meta">' + esc(s.meta) + "</span>" : "") + "</div>" +
+        (s.code ? '<div class="step-code">' + s.code + "</div>" : "") +
+        (s.body ? '<div class="step-body">' + s.body + "</div>" : "") +
+        "</div>";
+    }).join("");
+    $("tape").scrollTop = $("tape").scrollHeight;
+  }
+
+  function push(s) { state.steps.push(s); renderTape(); }
+
+  function runAsk(id) {
+    if (state.busy) return;
+    clearLater();
+    state.busy = true;
+    state.steps = [];
+    renderAsks();
+
+    var q = QUESTIONS.filter(function (x) { return x.id === id; })[0];
+    push({ kind: "ask", tag: "Asked", body: esc(q.q) });
+
+    push({ kind: "tool", tag: "Tool call", meta: "listTopics", code: '<span class="kw">listTopics</span>()' });
+
+    later(function () {
+      push({
+        kind: "result", tag: "Result", meta: "4 topics",
+        code: "client_exposure\nclient_limits\npositions\npositions.dlq"
+      });
+
+      later(function () {
+        if (id === "book") return askBook();
+        if (id === "changed") return askChanged();
+        return askExposure();
+      }, 420);
+    }, 460);
+  }
+
+  function sqlStep(sql, meta) {
+    push({ kind: "tool", tag: "Tool call", meta: meta || "queryData", code: sql });
+  }
+
+  function askExposure() {
+    sqlStep('<span class="kw">SELECT</span> client_id, exposure_usd, limit_usd, as_of\n' +
+      '<span class="kw">FROM</span> client_exposure\n' +
+      '<span class="kw">WHERE</span> client_id = <span style="color:var(--mint)">\'4417\'</span> <span class="kw">LIMIT</span> 1');
+
+    later(function () {
+      var served = servedNow();
+      var a = servedAge();
+      var lim = row().limit;
+      var pct = (served / lim) * 100;
+
+      push({
+        kind: "result", tag: "Result", meta: state.mode === "before" ? "overnight copy" : "Lightning Table / 180ms",
+        code: "client_id    4417\nexposure_usd " + money(served) + "\nlimit_usd    " + money(lim) +
+          "\nas_of        " + clock(START + state.t - a)
+      });
+
+      later(function () {
+        if (state.mode === "before") {
+          var tru = trueExposure();
+          push({
+            kind: "wrong", tag: "Answer",
+            body: "Client 4417 is at <strong>" + pct.toFixed(1) + "% of its limit</strong>, with " +
+              money(lim - served) + " of headroom. No action needed.",
+            meta: "the number is " + age(a) + " old"
+          });
+          later(function () {
+            push({
+              kind: "wrong", tag: "What was true",
+              body: "Exposure was actually <strong>" + money(tru) + "</strong>, or " +
+                ((tru / lim) * 100).toFixed(1) + "% of the limit. The agent acted on last night's file and did not escalate.",
+              meta: "the breach"
+            });
+            done();
+          }, 900);
+        } else {
+          push({
+            kind: "answer", tag: "Answer",
+            body: "Client 4417 is at <strong>" + pct.toFixed(1) + "% of its limit</strong>. Exposure is <strong>" +
+              money(served) + "</strong> against " + money(lim) + ", and this figure is <strong>" + age(a) +
+              "</strong> old, read from the as_of column on the row.",
+            meta: state.isolation === "uncommitted" ? "read uncommitted" : "age bounded by Flink's commit"
+          });
+          done();
+        }
+      }, 640);
+    }, 620);
+  }
+
+  function askBook() {
+    sqlStep('<span class="kw">SELECT</span> client_id, limit_util_pct, as_of\n' +
+      '<span class="kw">FROM</span> client_exposure\n' +
+      '<span class="kw">ORDER BY</span> limit_util_pct <span class="kw">DESC</span> <span class="kw">LIMIT</span> 4');
+
+    later(function () {
+      var rows = BOOK.map(function (r) {
+        var e = r.exposure + (r.id === CLIENT ? state.committed : 0);
+        return { id: r.id, util: (e / r.limit) * 100 };
+      }).sort(function (a, b) { return b.util - a.util; }).slice(0, 4);
+
+      push({
+        kind: "result", tag: "Result", meta: "whole book / same table",
+        code: rows.map(function (r) { return String(r.id) + "   " + r.util.toFixed(1) + "%"; }).join("\n")
+      });
+
+      later(function () {
+        push({
+          kind: "answer", tag: "Answer",
+          body: "Four clients are above 85%. <strong>" + rows[0].id + "</strong> is closest at " +
+            rows[0].util.toFixed(1) + "%. Every figure is <strong>" + age(servedAge()) +
+            "</strong> old. Flink precomputes the utilisation column, because a Lightning Table serves one topic and does not aggregate.",
+          meta: "the risk officer's question, not the desk's"
+        });
+        done();
+      }, 620);
+    }, 600);
+  }
+
+  function askChanged() {
+    sqlStep('<span class="kw">SELECT</span> event_time, symbol, quantity, price, source\n' +
+      '<span class="kw">FROM</span> positions\n' +
+      '<span class="kw">WHERE</span> client_id = <span style="color:var(--mint)">\'4417\'</span>\n' +
+      '<span class="kw">ORDER BY</span> event_time <span class="kw">DESC</span> <span class="kw">LIMIT</span> 1');
+
+    later(function () {
+      if (state.fillAt === null) {
+        push({ kind: "result", tag: "Result", meta: "1 row", code: "2026-11-09T14:06:19Z  ESU6  240  5412.25  book_of_record.changes" });
+        later(function () {
+          push({
+            kind: "answer", tag: "Answer",
+            body: "Nothing since 14:06:19. The last change was a 240 lot on ESU6, and it is already in the exposure figure.",
+            meta: "age " + age(servedAge())
+          });
+          done();
+        }, 560);
+      } else {
+        push({
+          kind: "result", tag: "Result", meta: "1 row",
+          code: "2026-11-09T" + clock(START + state.fillAt).slice(0, 8) + "Z  ESU6  +850  5414.00  book_of_record.changes"
+        });
+        later(function () {
+          var inState = state.committed > 0;
+          push({
+            kind: "answer", tag: "Answer",
+            body: "A fill of 850 lots landed <strong>" + age(state.t - state.fillAt) + "</strong> ago, worth " +
+              money(FILL_SIZE) + ". " + (inState
+                ? "It is already in the exposure figure."
+                : "It is in the topic now and reaches the served figure at Flink's next commit, in " +
+                  age(FLINK_COMMIT - (state.t - state.lastCommit)) + "."),
+            meta: inState ? "committed" : "in flight"
+          });
+          done();
+        }, 580);
+      }
+    }, 600);
+  }
+
+  function done() { state.busy = false; renderAsks(); }
+
+  /* ---------- escalations, from the Flink streaming agent ---------- */
+  function renderEsc() {
+    if (!state.esc.length) {
+      $("esc").innerHTML = '<div class="esc-none">No client within 10% of a limit.</div>';
+      return;
+    }
+    $("esc").innerHTML = state.esc.map(function (e) {
+      return '<div class="esc-row" data-tone="' + e.tone + '">' +
+        '<span class="esc-who">' + e.who + "</span>" +
+        '<span class="esc-what">' + e.what + "</span>" +
+        "</div>";
+    }).join("");
+  }
+
+  function renderClocks() {
+    var a1 = servedAge();
+    var a3 = state.mode === "before" ? SOURCES[5].age + state.t : state.t - state.lastSnap;
+    var rows = [
+      { n: "Whoever asked", k: state.mode === "before" ? "Overnight copy" : "Lightning Table / SQL and MCP", a: a1 },
+      { n: "The risk officer", k: state.mode === "before" ? "Database fed overnight" : "Same table, whole book", a: a1 },
+      { n: "Reporting and audit", k: state.mode === "before" ? "ETL, when it ran" : "Open table / Tableflow", a: a3 }
+    ];
+    $("clocks").innerHTML = rows.map(function (r) {
+      return '<div class="clk" data-tone="' + tone(r.a) + '">' +
+        '<span class="clk-who"><span class="clk-n">' + r.n + '</span><span class="clk-k">' + r.k + "</span></span>" +
+        '<span class="clk-age">' + age(r.a) + "</span></div>";
+    }).join("");
+
+    var lim = row().limit;
+    var served = servedNow();
+    var pct = (served / lim) * 100;
+    var truePct = (trueExposure() / lim) * 100;
+    $("limit-meter").innerHTML =
+      '<div class="meter-row"><span class="lbl">Served / limit used</span><span class="meter-pct num">' + pct.toFixed(1) + "%</span></div>" +
+      '<div class="meter-track"><div class="meter-fill" style="width:' + Math.min(100, pct) + '%" data-over="' + (pct > 100) + '"></div>' +
+      '<div class="meter-true" style="left:' + Math.min(100, truePct) + '%"></div></div>' +
+      '<div class="meter-row"><span class="lbl">White marker / true now</span><span class="meter-pct num">' + truePct.toFixed(1) + "%</span></div>";
+  }
+
+  function render() {
+    $("wall").textContent = clock(START + state.t);
+    $("client-line").textContent = "Client " + CLIENT + " / limit " + money(row().limit);
+    $("agent-conn").textContent = state.mode === "before" ? "No MCP. Reading a copy." : "Connected / 3 tools";
+    $("agent-note").innerHTML = state.mode === "before"
+      ? "In the before-world there is nothing to connect an agent to, so it reads whatever copy was loaded last. It answers confidently and it is wrong, at machine speed, as often as it likes."
+      : "The engine exposes three generic tools, so the agent writes its own SQL rather than calling a purpose-built endpoint. Same tables the desk reads, served where the records already are.";
+    $("iso-c").disabled = state.mode === "before";
+    $("iso-u").disabled = state.mode === "before";
+    $("iso-note").innerHTML = state.mode === "before"
+      ? "Isolation is not a choice here. There is one overnight copy, and it is as old as it is."
+      : (state.isolation === "uncommitted"
+        ? "Reading uncommitted goes straight to the changelog, so a change shows in <strong>under 100ms</strong>. The price is exactly once: a reader can see a change that is later taken back."
+        : "A Lightning Table takes a change in under 100ms. The minute is <strong>Flink's commit</strong>, the price of exactly once, and it is a setting rather than a limit.");
+    renderNorm();
+    renderEsc();
+    renderClocks();
+    $("fill").disabled = state.fillAt !== null;
+    $("fat").disabled = state.reject;
+    $("foot-note").innerHTML = state.speed > 1
+      ? '<span class="accel">Accelerated ' + state.speed + "&times;</span>"
+      : "Figures are illustrative. No client, venue or custodian is named.";
+  }
+
+  function tick() {
+    state.t += 0.25 * state.speed;
+
+    while (state.t - state.lastCommit >= FLINK_COMMIT) {
+      state.lastCommit += FLINK_COMMIT;
+      if (state.fillAt !== null && state.fillAt <= state.lastCommit) state.committed = FILL_SIZE;
+    }
+    while (state.t - state.lastSnap >= ICEBERG_SNAP) {
+      state.lastSnap += ICEBERG_SNAP;
+      if (state.fillAt !== null && state.fillAt <= state.lastSnap) state.snapped = FILL_SIZE;
+    }
+
+    // The streaming agent watches the served figure and escalates before a breach.
+    var pct = (servedNow() / row().limit) * 100;
+    if (state.mode === "streamhouse" && pct >= 85 && !state.escalated) {
+      state.escalated = true;
+      state.esc.unshift({
+        tone: "warn", who: "Escalated to the risk officer / " + clock(START + state.t),
+        what: "Client " + CLIENT + " at " + pct.toFixed(1) + "% of limit after a 850 lot fill. Approaching the 90% threshold."
+      });
+    }
+
+    // The source ages keep climbing while the simulated day runs.
+    state.hit = Math.floor(state.t * 2) % SOURCES.length;
+
+    render();
+  }
+
+  /* ---------- controls ---------- */
+  function setMode(m) {
+    state.mode = m;
+    state.steps = [];
+    state.esc = [];
+    state.escalated = false;
+    clearLater();
+    state.busy = false;
+    $("m-before").setAttribute("aria-pressed", String(m === "before"));
+    $("m-stream").setAttribute("aria-pressed", String(m === "streamhouse"));
+    if (m === "before") {
+      state.esc.unshift({
+        tone: "bad", who: "Found out the next morning / 08:14",
+        what: "Client " + CLIENT + " closed yesterday at 103% of limit. The agent saw 68% all afternoon and escalated nothing."
+      });
+    }
+    renderAsks();
+    renderTape();
+    render();
+  }
+
+  $("m-before").addEventListener("click", function () { setMode("before"); });
+  $("m-stream").addEventListener("click", function () { setMode("streamhouse"); });
+
+  function setIsolation(i) {
+    state.isolation = i;
+    $("iso-c").setAttribute("aria-pressed", String(i === "committed"));
+    $("iso-u").setAttribute("aria-pressed", String(i === "uncommitted"));
+    render();
+  }
+  $("iso-c").addEventListener("click", function () { setIsolation("committed"); });
+  $("iso-u").addEventListener("click", function () { setIsolation("uncommitted"); });
+
+  $("fill").addEventListener("click", function () {
+    state.fillAt = state.t;
+    render();
+  });
+
+  $("fat").addEventListener("click", function () {
+    state.reject = true;
+    state.esc.unshift({
+      tone: "warn", who: "Flink validation / " + clock(START + state.t),
+      what: "A 2,400,000 lot on ESU6 was rejected to positions.dlq. The exposure figure never moved."
+    });
+    render();
+    later(function () { state.reject = false; render(); }, 7000);
+  });
+
+  $("speed").addEventListener("click", function () {
+    state.speed = state.speed === 1 ? 10 : 1;
+    $("speed").innerHTML = "Speed " + state.speed + "&times;";
+    $("speed").setAttribute("data-hot", String(state.speed > 1));
+    render();
+  });
+
+  $("reset").addEventListener("click", function () {
+    clearLater();
+    state.t = 0; state.fillAt = null; state.lastCommit = 0; state.lastSnap = 0;
+    state.committed = 0; state.snapped = 0; state.reject = false;
+    state.steps = []; state.esc = []; state.escalated = false; state.busy = false;
+    renderAsks(); renderTape(); render();
+  });
+
+  renderAsks();
+  renderTape();
+  render();
+  setInterval(tick, 250);
+</script>

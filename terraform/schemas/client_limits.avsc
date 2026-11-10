@@ -1,0 +1,7 @@
+{
+  "type": "record", "name": "ClientLimit", "namespace": "demo",
+  "fields": [
+    { "name": "client_id", "type": "string" },
+    { "name": "limit_usd", "type": "double" }
+  ]
+}

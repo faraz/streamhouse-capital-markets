@@ -1,0 +1,17 @@
+{
+  "name": "streamhouse-capital-markets",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "deploy": "npm run build && wrangler deploy",
+    "worker:dev": "wrangler dev"
+  },
+  "devDependencies": {
+    "typescript": "5.6.3",
+    "vite": "5.4.11",
+    "wrangler": "3.90.0"
+  }
+}

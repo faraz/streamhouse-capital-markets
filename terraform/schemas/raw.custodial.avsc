@@ -1,0 +1,9 @@
+{
+  "type": "record", "name": "Custodial", "namespace": "demo.raw",
+  "fields": [
+    { "name": "acct_no", "type": "string" },
+    { "name": "instrument", "type": "string" },
+    { "name": "units", "type": "int" },
+    { "name": "value_cents", "type": "long" }
+  ]
+}

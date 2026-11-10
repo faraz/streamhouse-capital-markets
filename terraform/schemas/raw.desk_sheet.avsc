@@ -1,0 +1,9 @@
+{
+  "type": "record", "name": "DeskSheet", "namespace": "demo.raw",
+  "fields": [
+    { "name": "account", "type": "string" },
+    { "name": "symbol", "type": "string" },
+    { "name": "quantity", "type": "string" },
+    { "name": "price", "type": "string" }
+  ]
+}

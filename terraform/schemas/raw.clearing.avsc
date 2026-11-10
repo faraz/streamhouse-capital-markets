@@ -1,0 +1,8 @@
+{
+  "type": "record", "name": "Clearing", "namespace": "demo.raw",
+  "fields": [
+    { "name": "acct", "type": "string" },
+    { "name": "total_due_cents", "type": "long" },
+    { "name": "statement_date", "type": "string" }
+  ]
+}

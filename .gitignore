@@ -1,0 +1,24 @@
+# Credentials. Nothing in here is ever committed.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+terraform.tfvars
+*.auto.tfvars
+
+# Terraform state holds secrets in plaintext.
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+crash.log
+
+# Node
+node_modules/
+.next/
+dist/
+.vercel/
+
+# macOS
+.DS_Store

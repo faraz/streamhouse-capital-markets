@@ -1,0 +1,11 @@
+{
+  "type": "record", "name": "BookOfRecord", "namespace": "demo.raw",
+  "fields": [
+    { "name": "client", "type": "string" },
+    { "name": "sym", "type": "string" },
+    { "name": "qty", "type": "int" },
+    { "name": "px", "type": "double" },
+    { "name": "change_type", "type": { "type": "enum", "name": "ChangeType", "symbols": ["INSERT", "UPDATE", "DELETE"] } },
+    { "name": "changed_at", "type": { "type": "long", "logicalType": "timestamp-millis" } }
+  ]
+}

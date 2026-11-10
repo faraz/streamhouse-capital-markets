@@ -1,0 +1,9 @@
+{
+  "type": "record", "name": "Venue", "namespace": "demo.raw",
+  "fields": [
+    { "name": "acct", "type": "string" },
+    { "name": "sym", "type": "string" },
+    { "name": "q", "type": "int" },
+    { "name": "p", "type": "double" }
+  ]
+}

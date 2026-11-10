@@ -1,0 +1,21 @@
+name = "streamhouse-capital-markets"
+main = "worker/index.ts"
+compatibility_date = "2026-10-01"
+
+# The built SPA is served by the Worker, so one deploy covers the screen and its API.
+[assets]
+directory = "dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+
+# Secrets are set with `wrangler secret put`, never committed:
+#   CONFLUENT_SQL_ENDPOINT   https://sql.us-east-1.aws.confluent.cloud/query/v1
+#   CONFLUENT_GLOBAL_KEY     global API key id, for querying Lightning Tables
+#   CONFLUENT_GLOBAL_SECRET  its secret
+#   CONFLUENT_REST_ENDPOINT  the cluster's REST endpoint, for producing records
+#   CONFLUENT_CLUSTER_ID
+#   CONFLUENT_KAFKA_KEY      cluster API key id, for producing narrative events
+#   CONFLUENT_KAFKA_SECRET   its secret
+#   RTCE_MCP_URL             the Real-Time Context Engine MCP endpoint
+#   ANTHROPIC_API_KEY        for the interactive agent
+#   DEMO_GATE                shared secret the screen sends with every call

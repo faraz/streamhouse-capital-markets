@@ -1,0 +1,14 @@
+{
+  "type": "record", "name": "Position", "namespace": "demo",
+  "doc": "One fact that happened, with a key, a time and its own age.",
+  "fields": [
+    { "name": "client_id", "type": "string" },
+    { "name": "symbol", "type": "string" },
+    { "name": "quantity", "type": "int" },
+    { "name": "price", "type": "double" },
+    { "name": "notional_usd", "type": "double" },
+    { "name": "event_time", "type": { "type": "long", "logicalType": "timestamp-millis" } },
+    { "name": "source", "type": "string" },
+    { "name": "age_ms", "type": "long" }
+  ]
+}
