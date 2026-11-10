@@ -7,11 +7,15 @@
     "build": "vite build",
     "preview": "vite preview",
     "deploy": "npm run build && wrangler deploy",
-    "worker:dev": "wrangler dev"
+    "worker:dev": "wrangler dev",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "devDependencies": {
     "typescript": "5.6.3",
     "vite": "5.4.11",
-    "wrangler": "3.90.0"
+    "wrangler": "3.90.0",
+    "vitest": "2.1.8",
+    "@cloudflare/workers-types": "4.20241127.0"
   }
 }

@@ -1,45 +1,30 @@
-# The demo's own environment. Separate so that `terraform destroy` ends every meter, and
-# so Stream Governance stays Essentials here no matter what else the org does.
-#
-# Essentials is deliberate, not a default: upgrading to Advanced cannot be undone. Per
-# Confluent, "it is not possible to downgrade from Advanced to Essentials. The only
-# option is to delete the environment, and start over."
-resource "confluent_environment" "demo" {
-  display_name = var.prefix
+# --- what already exists -----------------------------------------------------------
+# Read, not managed. The environment is already on Stream Governance Essentials, which
+# is where it stays: upgrading to Advanced cannot be reversed, and the only way back is
+# to delete the environment. Nothing here sets the package at all.
 
-  stream_governance {
-    package = "ESSENTIALS"
-  }
+data "confluent_environment" "demo" {
+  id = var.environment_id
 }
 
-# Basic qualifies for Lightning Tables, and its first eCKU is free.
-resource "confluent_kafka_cluster" "demo" {
-  display_name = "${var.prefix}-cluster"
-  availability = "SINGLE_ZONE"
-  cloud        = "AWS"
-  region       = var.region
-
-  basic {}
+data "confluent_kafka_cluster" "demo" {
+  id = var.cluster_id
 
   environment {
-    id = confluent_environment.demo.id
+    id = data.confluent_environment.demo.id
   }
 }
 
+# Provisioned automatically with the environment, so a data source rather than a resource.
 data "confluent_schema_registry_cluster" "demo" {
   environment {
-    id = confluent_environment.demo.id
+    id = data.confluent_environment.demo.id
   }
-
-  depends_on = [confluent_kafka_cluster.demo]
 }
 
-# --- identities -------------------------------------------------------------------
-# Three principals, so no one credential does everything.
-#
-#   manager  provisions topics and schemas, and runs Flink
-#   producer writes the raw topics (Datagen, and the Worker's narrative events)
-#   reader   is the only credential the frontend holds
+# --- identities --------------------------------------------------------------------
+# Three principals, so that no single credential does everything. The reader is the only
+# one the frontend ever holds.
 
 resource "confluent_service_account" "manager" {
   display_name = "${var.prefix}-manager"
@@ -48,7 +33,7 @@ resource "confluent_service_account" "manager" {
 
 resource "confluent_service_account" "producer" {
   display_name = "${var.prefix}-producer"
-  description  = "Writes the raw topics. Held by the generators and the Worker."
+  description  = "Writes the raw topics: the generators and the narrative events."
 }
 
 resource "confluent_service_account" "reader" {
@@ -59,31 +44,39 @@ resource "confluent_service_account" "reader" {
 resource "confluent_role_binding" "manager_env_admin" {
   principal   = "User:${confluent_service_account.manager.id}"
   role_name   = "EnvironmentAdmin"
-  crn_pattern = confluent_environment.demo.resource_name
+  crn_pattern = data.confluent_environment.demo.resource_name
 }
 
 resource "confluent_role_binding" "producer_write" {
   principal   = "User:${confluent_service_account.producer.id}"
   role_name   = "DeveloperWrite"
-  crn_pattern = "${confluent_kafka_cluster.demo.rbac_crn}/kafka=${confluent_kafka_cluster.demo.id}/topic=*"
+  crn_pattern = "${data.confluent_kafka_cluster.demo.rbac_crn}/kafka=${data.confluent_kafka_cluster.demo.id}/topic=*"
 }
 
-# A Lightning Table query needs read on BOTH the topic and the Schema Registry cluster:
-# topic scope alone grants query but not metadata, and SR scope alone the reverse. A
-# cluster-scope binding covers both in one.
-resource "confluent_role_binding" "reader_cluster_read" {
+# A Lightning Table query needs read on BOTH the topic and the Schema Registry subject:
+# topic scope alone grants the query but not the metadata, and subject scope alone grants
+# the reverse.
+#
+# Both of these must name a resource. A bare cluster CRN is refused with "Resources must
+# be specified for role DeveloperRead", and Schema Registry has no cluster-level
+# DeveloperRead at all ("No role DeveloperRead for resource type SchemaRegistry"). So the
+# patterns end in topic=* and subject=*, which is also what Confluent's own quickstart
+# grants its reader.
+resource "confluent_role_binding" "reader_topic_read" {
   principal   = "User:${confluent_service_account.reader.id}"
   role_name   = "DeveloperRead"
-  crn_pattern = confluent_kafka_cluster.demo.rbac_crn
+  crn_pattern = "${data.confluent_kafka_cluster.demo.rbac_crn}/kafka=${data.confluent_kafka_cluster.demo.id}/topic=*"
 }
 
-resource "confluent_role_binding" "reader_sr_read" {
+resource "confluent_role_binding" "reader_subject_read" {
   principal   = "User:${confluent_service_account.reader.id}"
   role_name   = "DeveloperRead"
-  crn_pattern = data.confluent_schema_registry_cluster.demo.resource_name
+  crn_pattern = "${data.confluent_schema_registry_cluster.demo.resource_name}/subject=*"
 }
 
-# --- keys -------------------------------------------------------------------------
+# --- keys --------------------------------------------------------------------------
+# Note what is missing: querying a Lightning Table needs a *Global* API key, and the
+# provider cannot express that scope. One CLI line mints it. See scripts/global-key.sh.
 
 resource "confluent_api_key" "manager_kafka" {
   display_name = "${var.prefix}-manager-kafka"
@@ -96,12 +89,12 @@ resource "confluent_api_key" "manager_kafka" {
   }
 
   managed_resource {
-    id          = confluent_kafka_cluster.demo.id
-    api_version = confluent_kafka_cluster.demo.api_version
-    kind        = confluent_kafka_cluster.demo.kind
+    id          = data.confluent_kafka_cluster.demo.id
+    api_version = data.confluent_kafka_cluster.demo.api_version
+    kind        = data.confluent_kafka_cluster.demo.kind
 
     environment {
-      id = confluent_environment.demo.id
+      id = data.confluent_environment.demo.id
     }
   }
 
@@ -119,12 +112,12 @@ resource "confluent_api_key" "producer_kafka" {
   }
 
   managed_resource {
-    id          = confluent_kafka_cluster.demo.id
-    api_version = confluent_kafka_cluster.demo.api_version
-    kind        = confluent_kafka_cluster.demo.kind
+    id          = data.confluent_kafka_cluster.demo.id
+    api_version = data.confluent_kafka_cluster.demo.api_version
+    kind        = data.confluent_kafka_cluster.demo.kind
 
     environment {
-      id = confluent_environment.demo.id
+      id = data.confluent_environment.demo.id
     }
   }
 
@@ -147,23 +140,23 @@ resource "confluent_api_key" "manager_sr" {
     kind        = data.confluent_schema_registry_cluster.demo.kind
 
     environment {
-      id = confluent_environment.demo.id
+      id = data.confluent_environment.demo.id
     }
   }
 
   depends_on = [confluent_role_binding.manager_env_admin]
 }
 
-# --- flink ------------------------------------------------------------------------
-# CFUs bill per minute only while a statement runs, and an idle pool costs nothing
-# unless a statement sets a baseline CFU. max_cfu caps the hourly spend.
+# --- flink -------------------------------------------------------------------------
+# An idle pool costs nothing unless a statement sets a baseline CFU; statements bill per
+# minute while they run. max_cfu is the spend ceiling, not a performance setting.
 resource "confluent_flink_compute_pool" "demo" {
   display_name = "${var.prefix}-pool"
   cloud        = "AWS"
   region       = var.region
-  max_cfu      = 10
+  max_cfu      = var.flink_max_cfu
 
   environment {
-    id = confluent_environment.demo.id
+    id = data.confluent_environment.demo.id
   }
 }
