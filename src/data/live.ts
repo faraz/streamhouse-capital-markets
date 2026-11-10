@@ -37,7 +37,9 @@ export class LiveSource implements ExposureSource {
     this.base = opts.baseUrl ?? '';
     this.gate = opts.gate ?? '';
     this.clock = opts.clock;
-    this.doFetch = opts.fetchFn ?? fetch;
+    // Bound: storing window.fetch as a property loses its receiver and every call
+    // throws 'Illegal invocation'. A test's injected stub needs no binding.
+    this.doFetch = opts.fetchFn ?? ((...a: Parameters<typeof fetch>) => fetch(...a));
     this.fallback = new Simulator({ clock: opts.clock, clientCount: opts.clientCount ?? 4000 });
   }
 

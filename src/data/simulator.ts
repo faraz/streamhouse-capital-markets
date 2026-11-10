@@ -12,8 +12,10 @@ export const SNAPSHOT_MS = 300_000;
 /** A Lightning Table reflects a change within 100ms. */
 export const MATERIALIZE_MS = 100;
 
-/** The demo opens at 14:06:22, a little after two in the afternoon. */
-export const OPENING_MS = (14 * 3600 + 6 * 60 + 22) * 1000;
+/** The demo opens at 14:06:22 on the trading day, a little after two in the afternoon.
+ * A real epoch, not milliseconds since midnight: the record's own event_time is rendered
+ * as a date, and an offset showed every fact as having happened in 1970. */
+export const OPENING_MS = Date.UTC(2026, 10, 9, 14, 6, 22);
 
 const NOTIONAL_PER_LOT = 18.4e6 / 850;
 /**
@@ -259,7 +261,10 @@ export class Simulator implements ExposureSource {
       quantity: 240,
       price: 5412.25,
       notionalUsd: 240 * 5412.25,
-      eventTime: t - (live ? LIVE_BOOK_OF_RECORD.ageSec * 1000 : SOURCES[5]!.openingAgeSec * 1000 + t),
+      // Absolute, like every other time the screen shows. Computing it as an offset
+      // from the demo's start rendered every record as 1970.
+      eventTime:
+        OPENING_MS + t - (live ? LIVE_BOOK_OF_RECORD.ageSec * 1000 : SOURCES[5]!.openingAgeSec * 1000 + t),
       source: live ? 'book_of_record.changes' : 'nightly.extract',
       ageMs: live ? LIVE_BOOK_OF_RECORD.ageSec * 1000 : SOURCES[5]!.openingAgeSec * 1000 + t,
     };

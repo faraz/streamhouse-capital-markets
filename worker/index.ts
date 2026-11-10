@@ -10,6 +10,7 @@
  */
 import { num, rowsToObjects, runQuery, type QueryConfig } from '../src/data/query';
 import { ask } from './agent';
+import { fatFingerEvent, fillEvent, produceEvent, type ProduceConfig } from './produce';
 
 export interface Env {
   CONFLUENT_SQL_ENDPOINT: string;
@@ -20,6 +21,10 @@ export interface Env {
   DEMO_GATE?: string;
   RTCE_MCP_URL?: string;
   ANTHROPIC_API_KEY?: string;
+  CONFLUENT_REST_ENDPOINT?: string;
+  CONFLUENT_KAFKA_KEY?: string;
+  CONFLUENT_KAFKA_SECRET?: string;
+  RAW_EVENTS_SCHEMA_ID?: string;
   ASSETS: { fetch(req: Request): Promise<Response> };
 }
 
@@ -61,7 +66,7 @@ async function snapshot(env: Env, clientId: string): Promise<Response> {
     runQuery(c, `SELECT client_id, exposure_usd, limit_usd, limit_util_pct, as_of FROM client_exposure WHERE client_id = '${id}' LIMIT 1`),
     runQuery(c, `SELECT client_id, exposure_usd, limit_usd, limit_util_pct, as_of FROM client_exposure ORDER BY limit_util_pct DESC LIMIT ${BOOK_ROWS}`),
     runQuery(c, `SELECT client_id, symbol, quantity, price, event_time, source FROM positions WHERE client_id = '${id}' ORDER BY event_time DESC LIMIT 5`),
-    runQuery(c, `SELECT client_id, quantity, reject_reason, event_time FROM positions_dlq ORDER BY event_time DESC LIMIT 1`).catch(() => ({ columns: [], rows: [] })),
+    runQuery(c, `SELECT client_id, quantity, reject_reason, event_time FROM positions_dlq WHERE client_id = '${id}' ORDER BY event_time DESC LIMIT 1`).catch(() => ({ columns: [], rows: [] })),
     // Which feeds have actually produced anything. No GROUP BY on a Lightning Table, so
     // this reads the recent tail and collects the distinct sources from it.
     runQuery(c, `SELECT source FROM positions ORDER BY event_time DESC LIMIT 60`),
@@ -148,6 +153,20 @@ async function snapshot(env: Env, clientId: string): Promise<Response> {
   });
 }
 
+function produceConfig(env: Env): ProduceConfig | null {
+  const { CONFLUENT_REST_ENDPOINT, CONFLUENT_KAFKA_KEY, CONFLUENT_KAFKA_SECRET, RAW_EVENTS_SCHEMA_ID } = env;
+  if (!CONFLUENT_REST_ENDPOINT || !CONFLUENT_KAFKA_KEY || !CONFLUENT_KAFKA_SECRET || !RAW_EVENTS_SCHEMA_ID) {
+    return null;
+  }
+  return {
+    restEndpoint: CONFLUENT_REST_ENDPOINT,
+    clusterId: env.DEMO_CLUSTER_ID,
+    key: CONFLUENT_KAFKA_KEY,
+    secret: CONFLUENT_KAFKA_SECRET,
+    schemaId: Number(RAW_EVENTS_SCHEMA_ID),
+  };
+}
+
 /**
  * The agent's steps, streamed as they happen, so the screen renders it working rather
  * than a finished transcript. One event per step, newline-delimited JSON over SSE.
@@ -207,9 +226,17 @@ export default {
         if (!question?.trim()) return json({ error: 'no question' }, 400);
         return streamSteps(question.trim(), env);
       }
-      if (url.pathname === '/api/fill' || url.pathname === '/api/fat-finger') {
-        // Producing needs Schema Registry framing the Kafka REST API does not do for us.
-        return json({ error: 'not implemented yet: see ticket 10' }, 501);
+      if ((url.pathname === '/api/fill' || url.pathname === '/api/fat-finger') && req.method === 'POST') {
+        const cfg = produceConfig(env);
+        if (!cfg) return json({ error: 'producing needs the cluster REST endpoint, a Kafka key and the events schema id' }, 503);
+        const body = (await req.json().catch(() => ({}))) as { clientId?: string; lots?: number };
+        const clientId = body.clientId ?? '4417';
+        const event =
+          url.pathname === '/api/fill'
+            ? fillEvent(clientId, body.lots ?? 1200)
+            : fatFingerEvent(clientId);
+        await produceEvent(cfg, event);
+        return json({ produced: event });
       }
       return json({ error: 'not found' }, 404);
     } catch (e) {

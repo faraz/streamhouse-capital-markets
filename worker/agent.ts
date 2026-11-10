@@ -35,7 +35,45 @@ How to answer:
 - State the figure plainly, then say how old it is: subtract the as_of value from the current time you were given, and say the age in seconds or minutes. The age of the answer matters as much as the answer.
 - Round money to whole dollars and percentages to one decimal place.
 - If the tables cannot answer the question, say exactly that and say what they do hold. Never estimate, extrapolate or invent a number.
-- Two or three sentences. You are speaking to a desk, not writing a report.`;
+- Two or three sentences. You are speaking to a desk, not writing a report.
+- Plain prose only. No markdown, no asterisks for emphasis, no bullet points, no headings: your answer is typed onto a screen verbatim and any formatting marks appear as literal characters.`;
+
+/**
+ * What a room can read. The engine answers with full type metadata on every column, which
+ * the model needs and an audience cannot parse; projected on a wall it is noise that
+ * buries the one line that matters. The model still receives the original.
+ */
+function forDisplay(tool: string, raw: string): string {
+  try {
+    const j = JSON.parse(raw);
+    const rows = j?.rows ?? j;
+
+    if (tool === 'listTopics' && Array.isArray(rows?.topics)) {
+      return rows.topics.map((t: any) => `${t.name}${t.status ? `  (${t.status})` : ''}`).join('\n');
+    }
+
+    if (tool === 'getMetadata' && Array.isArray(rows?.columns)) {
+      return rows.columns
+        .map((c: any) => `${c.name}  ${String(c?.type?.type ?? '').toLowerCase()}`)
+        .join('\n');
+    }
+
+    if (tool === 'queryData') {
+      const cols: string[] = (rows?.schema?.columns ?? []).map((c: any) => String(c.name));
+      const data: any[] = rows?.data ?? [];
+      if (!data.length) return '(no rows)';
+      const lines = data
+        .slice(0, 12)
+        .map((d: any) => (Array.isArray(d) ? d : d?.row ?? []).map((v: any) => String(v)).join('   '));
+      const head = cols.length ? cols.join('   ') + '\n' : '';
+      const more = data.length > 12 ? `\n… ${data.length - 12} more rows` : '';
+      return head + lines.join('\n') + more;
+    }
+  } catch {
+    // Not JSON, or a shape this does not know: show it as it came.
+  }
+  return raw.slice(0, 600);
+}
 
 export interface AgentStep {
   kind: 'tool' | 'result' | 'answer' | 'error';
@@ -138,7 +176,7 @@ export async function* ask(question: string, deps: AgentDeps): AsyncGenerator<Ag
 
       try {
         const out = await rtce.callTool(block.name, args);
-        yield { kind: 'result', tag: 'Result', meta: block.name, code: out.slice(0, 1200) };
+        yield { kind: 'result', tag: 'Result', meta: block.name, code: forDisplay(block.name, out) };
         results.push({ type: 'tool_result', tool_use_id: block.id, content: out });
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);

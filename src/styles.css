@@ -116,7 +116,7 @@
   }
   .panel-head { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: baseline; justify-content: space-between; }
   .panel-title { font-size: 16px; font-weight: 600; letter-spacing: -0.012em; }
-  .panel-note { font-size: 13px; color: var(--mist); line-height: 1.45; max-width: 80ch; }
+  .panel-note { font-size: 13px; color: var(--mist); line-height: 1.45; max-width: 70ch; }
   .panel-note strong { color: var(--paper); font-weight: 600; }
 
   /* ---------- normalize lane ---------- */
@@ -131,7 +131,7 @@
   }
   .shape[data-hit="true"] { background: #141D42; }
   .shape[data-reject="true"] { background: #1A0D11; }
-  .shape[data-reject="true"]::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 2px; background: var(--alert); }
+  .shape[data-reject="true"]::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 1px; background: var(--alert); }
   .shape-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
   .shape-n { font-size: 12.5px; font-weight: 600; letter-spacing: -0.005em; }
   .shape-k { font-family: var(--mono); font-size: 10px; letter-spacing: 0.05em; color: var(--mist); text-transform: uppercase; }
@@ -171,7 +171,7 @@
   @media (max-width: 1060px) { .main { grid-template-columns: minmax(0, 1fr); } }
 
   /* the agent, the main event */
-  .agent { border-color: rgba(143, 176, 255, 0.4); box-shadow: 0 0 44px rgba(72, 118, 255, 0.11); }
+  .agent { border-color: rgba(143, 176, 255, 0.34); }
 
   .asks { display: flex; flex-wrap: wrap; gap: 8px; }
   .ask {
@@ -233,8 +233,8 @@
 
   .esc { display: flex; flex-direction: column; gap: 1px; background: var(--edge-soft); border: 1px solid var(--edge); border-radius: 4px; overflow: hidden; }
   .esc-row { background: var(--ink); padding: 10px 13px; display: flex; flex-direction: column; gap: 4px; animation: rise 260ms ease both; }
-  .esc-row[data-tone="warn"] { box-shadow: inset 2px 0 0 var(--amber); }
-  .esc-row[data-tone="bad"] { box-shadow: inset 2px 0 0 var(--alert); background: #14090C; }
+  .esc-row[data-tone="warn"] { box-shadow: inset 1px 0 0 var(--amber); }
+  .esc-row[data-tone="bad"] { box-shadow: inset 1px 0 0 var(--alert); background: #14090C; }
   .esc-who { font-family: var(--mono); font-size: 10px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: var(--mist); }
   .esc-what { font-size: 13px; line-height: 1.45; }
   .esc-none { background: var(--ink); padding: 18px 13px; font-size: 13px; color: var(--mist); text-align: center; }
@@ -296,3 +296,249 @@
 
 .err { color: var(--alert); font-size: 13px; line-height: 1.45; }
 .sql { white-space: pre-wrap; word-break: break-word; }
+
+/* ---------- browser surfaces ----------
+   The parts nobody draws still carry the design. Selection, the caret, scrollbars and
+   the focus ring all ship with defaults belonging to no design system, and on a screen
+   that will be projected they are the first thing that looks unbuilt. */
+
+::selection { background: rgba(143, 176, 255, 0.3); color: var(--paper); }
+
+:root {
+  color-scheme: dark;
+  scrollbar-color: rgba(169, 183, 217, 0.28) transparent;
+  scrollbar-width: thin;
+}
+
+*::-webkit-scrollbar { width: 9px; height: 9px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: rgba(169, 183, 217, 0.22);
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover { background: rgba(169, 183, 217, 0.4); background-clip: content-box; }
+*::-webkit-scrollbar-corner { background: transparent; }
+
+:focus-visible {
+  outline: 2px solid var(--cobalt);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+input { caret-color: var(--cobalt); }
+
+/* Figures line up in columns everywhere, so the numerals are tabular everywhere. */
+.num, .wall-time, .figure-val, .meter-pct, .clk-age, .book-util, .src-age, .shape-age, .step-code {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- React root and app chrome ---------- */
+
+#root { min-height: 100%; }
+
+.mast { position: relative; isolation: isolate; }
+.mast-glow {
+  position: absolute;
+  inset: -28px -40px auto -40px;
+  height: 320px;
+  z-index: -1;
+  pointer-events: none;
+  /* Fades out before it reaches the controls: the glow is atmosphere behind a title,
+     never something the eye has to read type through. */
+  mask-image: linear-gradient(to bottom, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.35) 55%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.35) 55%, transparent 100%);
+}
+.decode { display: inline; }
+
+.banner {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  letter-spacing: 0.04em;
+  color: var(--amber);
+  background: rgba(255, 194, 75, 0.08);
+  border: 1px solid rgba(255, 194, 75, 0.32);
+  border-radius: 4px;
+  padding: 9px 12px;
+}
+
+.booting {
+  display: flex; flex-direction: column; gap: 8px; align-items: flex-start;
+  padding: 80px 0;
+}
+.booting p { margin: 0; font-size: 15px; color: var(--mist); }
+
+/* ---------- source lane, now three columns ---------- */
+
+.shape {
+  grid-template-columns: minmax(0, 9.5rem) minmax(0, 1fr) auto;
+}
+.shape-age {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--mist);
+  white-space: nowrap;
+  padding-left: 10px;
+}
+.shape-age[data-tone="live"] { color: var(--mint); }
+.shape-age[data-tone="stalest"] { color: var(--alert); }
+.shape[data-stalest="true"] { background: #1A0D11; }
+.shape[data-stalest="true"]::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 1px; background: var(--alert); }
+.shape[data-live="true"]::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 1px; background: var(--mint); }
+
+/* ---------- the record, field by field ---------- */
+
+.record-wrap { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.record { display: flex; flex-direction: column; gap: 2px; }
+.record-row {
+  display: grid;
+  grid-template-columns: 13ch minmax(0, 1fr);
+  gap: 10px;
+  align-items: baseline;
+}
+.record-row .k { color: var(--mist); }
+.record-row .s { color: var(--mint); }
+.record-row .n2 { color: var(--cobalt); }
+.record-row .bad { color: var(--alert); }
+
+/* ---------- the figure in the rail ---------- */
+
+.figure { display: flex; flex-direction: column; gap: 5px; }
+.figure-val {
+  font-family: var(--mono);
+  font-size: clamp(26px, 3vw, 36px);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+.figure-sub { font-family: var(--mono); font-size: 11px; letter-spacing: 0.05em; color: var(--mist); }
+
+/* Motion is authored per panel, so no element inherits a generic entrance. */
+.step-body { min-width: 0; }
+
+/* ---------- fitting one screen ----------
+   This is driven on a projector during a talk, and a beat that needs the book must not
+   need a scroll first. The whole desk fits a 1600x1000 viewport: tighter rows, a tape
+   that fills the space it has instead of reserving a void, and a rail that scrolls
+   inside itself rather than pushing the page down. */
+
+.wrap { padding-block: 18px 20px; gap: 16px; max-width: 1760px; }
+.mast { gap: 12px; }
+.mast-glow { height: 260px; }
+
+.panel { padding: 14px 16px 15px; gap: 11px; }
+.panel-note { font-size: 12.5px; line-height: 1.45; }
+
+/* Six feeds, read at a glance, not scrolled through. */
+.shape { padding: 7px 12px; }
+.shape-n { font-size: 12px; }
+.shape-k { font-size: 9.5px; }
+.shape-raw { font-size: 10.5px; }
+
+.record { font-size: 11.5px; line-height: 1.6; }
+.record-row { grid-template-columns: 12ch minmax(0, 1fr); gap: 8px; }
+.chip { font-size: 9.5px; padding: 4px 8px; }
+
+.main { gap: 16px; align-items: stretch; }
+
+/* The tape takes the height that is left, so an empty agent panel is not a hole. */
+.agent { display: flex; flex-direction: column; }
+.tape { flex: 1 1 auto; min-height: 150px; max-height: 330px; overflow-y: auto; }
+.tape-empty { padding: 18px; }
+
+.rail-col { gap: 16px; }
+.clocks .clk { padding: 8px 12px; }
+.book-row { padding: 5px 11px; }
+.figure-val { font-size: clamp(22px, 2.3vw, 30px); }
+
+.asks { gap: 6px; }
+.ask { font-size: 12px; padding: 7px 10px; }
+.askbox input { padding: 8px 11px; font-size: 12.5px; }
+
+.foot { padding-top: 11px; }
+
+/* On a laptop screen rather than a projector, let it scroll rather than crush. */
+@media (max-height: 900px) {
+  .tape { max-height: 240px; }
+  .shape-raw { font-size: 10px; }
+}
+
+/* ingest_lag_ms is 13 characters: a 12ch key column ran the value into it. */
+.record-row { grid-template-columns: 14ch minmax(0, 1fr); }
+
+/* The empty agent panel states its case across the whole tape rather than
+   leaving a grey void beneath a centred paragraph. */
+.tape-empty {
+  flex: 1 1 auto;
+  justify-content: center;
+}
+.tape { display: flex; flex-direction: column; }
+
+/* ---------- the book ----------
+   These rules never existed: the panel was added in React after the stylesheet was
+   lifted from a prototype that had no book. */
+.book {
+  display: flex; flex-direction: column; gap: 1px;
+  background: var(--edge-soft); border: 1px solid var(--edge);
+  border-radius: 4px; overflow: hidden;
+}
+.book-head, .book-row {
+  display: grid;
+  grid-template-columns: 5ch minmax(0, 1fr) 5ch;
+  gap: 10px;
+  align-items: center;
+}
+.book-head { background: var(--raise); padding: 6px 11px; }
+.book-row {
+  background: var(--panel); padding: 5px 11px;
+  font-family: var(--mono); font-size: 11.5px;
+  transition: background-color 500ms ease;
+}
+.book-row[data-focus="true"] { background: #141D42; box-shadow: inset 1px 0 0 var(--cobalt); }
+.book-util { text-align: right; font-weight: 600; }
+.book-row[data-near="true"] .book-util { color: var(--alert); }
+.book-bar { height: 5px; border-radius: 3px; background: rgba(255,255,255,0.09); overflow: hidden; }
+.book-bar span { display: block; height: 100%; background: var(--cobalt); }
+.book-row[data-near="true"] .book-bar span { background: var(--alert); }
+
+/* ---------- three columns ----------
+   A projector is wide, not tall. Stacking the desk vertically pushed it to 1997px against
+   a 1250px viewport, which would have meant scrolling mid-beat to reach the book. */
+.desk {
+  display: grid;
+  grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.3fr) minmax(0, 0.86fr);
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 1400px) {
+  .desk { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Inside a column the six shapes sit above the record rather than beside it. */
+.norm { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+.chev { flex-direction: row; gap: 9px; align-self: flex-start; }
+.chev svg { transform: rotate(90deg); }
+
+.shape { grid-template-columns: minmax(0, 8.5rem) minmax(0, 1fr) auto; }
+.shape-raw { font-size: 10px; }
+
+/* Long transcripts and long books scroll inside their panel, never the page. */
+.tape { max-height: 46vh; }
+.book { max-height: 30vh; overflow-y: auto; }
+.esc { max-height: 26vh; overflow-y: auto; }
+
+/* Each column scrolls inside itself if a panel grows, so the page never does. */
+.desk > .rail-col { min-width: 0; }
+.tape { max-height: 40vh; }
+.book { max-height: 24vh; }
+.esc { max-height: 22vh; }
+
+/* Equal columns, so the agent's transcript fills the height it has rather than
+   leaving a void beside a long neighbour. */
+.desk { align-items: stretch; }
+.desk > .rail-col, .desk > .panel, .desk > .agent { height: 100%; }
+.rail-col { display: flex; flex-direction: column; }
+.esc, .book { max-height: none; overflow: visible; }

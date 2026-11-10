@@ -16,7 +16,8 @@
     "types": [
       "@cloudflare/workers-types",
       "vite/client"
-    ]
+    ],
+    "jsx": "react-jsx"
   },
   "include": [
     "src",

@@ -1,8 +1,8 @@
 import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
 
-// The SPA is plain TypeScript, no framework: the prototype's code already works and a
-// port to React would buy nothing before Thursday.
 export default defineConfig({
+  plugins: [react()],
   build: { outDir: 'dist', emptyOutDir: true },
   server: { port: 5173 },
 });

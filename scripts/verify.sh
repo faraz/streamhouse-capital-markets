@@ -1,0 +1,146 @@
+#!/usr/bin/env bash
+# Is the pipeline actually up? Answers it without clicking around a console.
+#
+# No mocks: every check here drives the real CLI or the real query endpoint. An
+# integration claim that mocks anything is not an integration claim.
+#
+#   scripts/verify.sh           full run, including a convergence test (~3 min)
+#   scripts/verify.sh --quick   checks only, no produce (~30s)
+#
+# Exits non-zero if anything fails, so it can gate a rehearsal.
+set -uo pipefail
+cd "$(dirname "$0")/.."
+
+PATH="/opt/homebrew/bin:$PATH"
+set -a; . ./.env; set +a
+
+QUICK=0
+[ "${1:-}" = "--quick" ] && QUICK=1
+
+FAILED=0
+pass() { printf '  \033[32mPASS\033[0m  %s\n' "$1"; }
+fail() { printf '  \033[31mFAIL\033[0m  %s\n' "$1"; FAILED=1; }
+section() { printf '\n== %s\n' "$1"; }
+
+TOKEN=$(printf '%s:%s' "$CONFLUENT_GLOBAL_KEY" "$CONFLUENT_GLOBAL_SECRET" | base64)
+query() {
+  curl -s --max-time 40 -X POST "$CONFLUENT_SQL_ENDPOINT" \
+    -H "Content-Type: application/json" -H "Authorization: Basic $TOKEN" \
+    -d "{\"catalog_name\":\"$DEMO_ENVIRONMENT_ID\",\"database_name\":\"$DEMO_CLUSTER_ID\",\"query\":\"$1\",\"max_result_rows\":200}"
+}
+rows() { query "$1" | jq -r '.result.data[]? | @tsv'; }
+
+VERIFY_CLIENT="28857"
+FILL_LOTS=1000
+FILL_PX=5414.0
+
+section "Flink statements"
+STMTS=$(confluent flink statement list --cloud aws --region us-east-1 \
+  --environment "$DEMO_ENVIRONMENT_ID" -o json 2>/dev/null)
+for s in cm-agg-1 cm-n-mq-1 cm-norm-mq-1 cm-n-ven cm-n-dsk cm-n-cus cm-n-clr cm-n-bor cm-n-evt cm-grd-1 cm-g-evt; do
+  st=$(printf '%s' "$STMTS" | jq -r --arg n "$s" '.[] | select(.name==$n) | .status' 2>/dev/null)
+  [ -z "$st" ] && continue
+  if [ "$st" = "RUNNING" ]; then pass "$s is RUNNING"; else fail "$s is $st"; fi
+done
+RUNNING=$(printf '%s' "$STMTS" | jq -r '[.[] | select(.status=="RUNNING")] | length')
+if [ "${RUNNING:-0}" -ge 8 ]; then pass "$RUNNING statements running"; else fail "only ${RUNNING:-0} statements running, expected at least 8"; fi
+
+section "Lightning Tables"
+LT=$(confluent rtce rtce-topic list --environment "$DEMO_ENVIRONMENT_ID" \
+  --cluster "$DEMO_CLUSTER_ID" -o json 2>/dev/null)
+for t in client_exposure positions positions_dlq; do
+  ph=$(printf '%s' "$LT" | jq -r --arg t "$t" '.[] | select(.topic_name==$t) | .phase')
+  if [ "$ph" = "ACTIVE" ]; then pass "$t is ACTIVE"; else fail "$t is ${ph:-missing}"; fi
+done
+
+section "Queryability"
+# ACTIVE does not mean queryable: a table reported ACTIVE and still refused queries for
+# another 20 seconds. So the check is a successful query, never a phase.
+for t in client_exposure positions positions_dlq; do
+  if query "SELECT * FROM $t LIMIT 1" | jq -e '.result' >/dev/null 2>&1; then
+    pass "$t answers a query"
+  else
+    fail "$t does not answer: $(query "SELECT * FROM $t LIMIT 1" | jq -r '.errors[0].code // "unknown"')"
+  fi
+done
+
+section "The book"
+BOOK=$(rows "SELECT client_id, limit_util_pct FROM client_exposure ORDER BY limit_util_pct DESC LIMIT 12")
+N=$(printf '%s' "$BOOK" | grep -c . || true)
+if [ "$N" -ge 10 ]; then pass "book returns $N rows"; else fail "book returned $N rows"; fi
+TOP8=$(printf '%s' "$BOOK" | head -8 | cut -f1 | sort | tr '\n' ' ')
+EXPECT=$(printf '%s\n' 2286 3318 4417 5560 6154 7405 8803 9021 | tr '\n' ' ')
+if [ "$TOP8" = "$EXPECT" ]; then
+  pass "the deck's eight clients head the book"
+else
+  fail "the top of the book is not the deck's eight: $TOP8"
+fi
+OVER=$(printf '%s' "$BOOK" | awk -F'\t' '$2 > 100 {print $1}' | tr '\n' ' ')
+if [ -z "$OVER" ]; then pass "no client is over its limit"; else fail "over limit: $OVER"; fi
+
+section "Generator"
+CONN=$(confluent connect cluster list --environment "$DEMO_ENVIRONMENT_ID" \
+  --cluster "$DEMO_CLUSTER_ID" -o json 2>/dev/null)
+CN=$(printf '%s' "$CONN" | jq -r '[.[] | select(.status=="RUNNING")] | length')
+if [ "${CN:-0}" -ge 1 ]; then pass "$CN connector(s) running"; else fail "no connector running"; fi
+SRC=$(rows "SELECT source FROM positions ORDER BY event_time DESC LIMIT 60" | sort -u | tr '\n' ' ')
+pass "feeds seen recently: $SRC"
+
+section "The agent's MCP endpoint"
+MCP=$(curl -s --max-time 40 -X POST "$RTCE_MCP_URL" \
+  -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" \
+  -H "Authorization: Basic $TOKEN" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}')
+TOOLS=$(printf '%s' "$MCP" | sed -n 's/^data: //p' | jq -r '[.result.tools[].name] | sort | join(",")' 2>/dev/null)
+if [ "$TOOLS" = "getMetadata,listTopics,queryData" ]; then
+  pass "three tools on the connection"
+else
+  fail "unexpected tools: ${TOOLS:-none}"
+fi
+
+if [ "$QUICK" = "1" ]; then
+  head "Result"
+  [ "$FAILED" = "0" ] && { printf '  checks passed (quick: no convergence test)\n'; exit 0; }
+  printf '  something failed\n'; exit 1
+fi
+
+section "Convergence: does a produced record reach the served figure?"
+BEFORE=$(rows "SELECT exposure_usd FROM client_exposure WHERE client_id = '$VERIFY_CLIENT' LIMIT 1")
+if [ -z "$BEFORE" ]; then
+  fail "no exposure row for the verification client $VERIFY_CLIENT"
+else
+  EXPECTED=$(python3 -c "print(float('$BEFORE') + $FILL_LOTS * $FILL_PX)")
+  printf '  client %s: %s, expecting %s\n' "$VERIFY_CLIENT" "$BEFORE" "$EXPECTED"
+
+  curl -s --max-time 40 -o /dev/null -X POST \
+    "$CONFLUENT_REST_ENDPOINT/kafka/v3/clusters/$DEMO_CLUSTER_ID/topics/raw_events/records" \
+    -H "Content-Type: application/json" \
+    -u "$CONFLUENT_KAFKA_KEY:$CONFLUENT_KAFKA_SECRET" \
+    -d "$(python3 - "$VERIFY_CLIENT" "$FILL_LOTS" "$FILL_PX" "$RAW_EVENTS_SCHEMA_ID" <<'PY'
+import base64, json, struct, sys, datetime
+acct, lots, px, sid = sys.argv[1], int(sys.argv[2]), float(sys.argv[3]), int(sys.argv[4])
+ts = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d %H:%M:%S.%f')[:23]
+payload = json.dumps({"acct": acct, "sym": "ESU6", "qty": lots, "px": px, "ts": ts, "kind": "verify"}).encode()
+framed = b"\x00" + struct.pack(">I", sid) + payload
+print(json.dumps({"key": {"type": "STRING", "data": acct},
+                  "value": {"type": "BINARY", "data": base64.b64encode(framed).decode()}}))
+PY
+)"
+  printf '  produced %s lots, waiting for the commit\n' "$FILL_LOTS"
+
+  OK=0
+  for i in $(seq 1 20); do
+    sleep 15
+    NOW=$(rows "SELECT exposure_usd FROM client_exposure WHERE client_id = '$VERIFY_CLIENT' LIMIT 1")
+    if [ -n "$NOW" ] && python3 -c "import sys; sys.exit(0 if abs(float('$NOW') - $EXPECTED) < 1.0 else 1)"; then
+      pass "converged after $((i*15))s: $NOW"
+      OK=1; break
+    fi
+    printf '  [%ss] %s\n' "$((i*15))" "${NOW:-no row}"
+  done
+  [ "$OK" = "1" ] || fail "did not converge to $EXPECTED within 300s"
+fi
+
+section "Result"
+if [ "$FAILED" = "0" ]; then printf '  the pipeline is up and a produced record reaches the served figure\n'; exit 0; fi
+printf '  something failed\n'; exit 1

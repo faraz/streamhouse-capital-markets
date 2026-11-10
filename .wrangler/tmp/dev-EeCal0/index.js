@@ -1348,10 +1348,10 @@ var init_node_browser2 = __esm({
   }
 });
 
-// .wrangler/tmp/bundle-ZJIqQE/middleware-loader.entry.ts
+// .wrangler/tmp/bundle-3DcRFk/middleware-loader.entry.ts
 init_modules_watch_stub();
 
-// .wrangler/tmp/bundle-ZJIqQE/middleware-insertion-facade.js
+// .wrangler/tmp/bundle-3DcRFk/middleware-insertion-facade.js
 init_modules_watch_stub();
 
 // worker/index.ts
@@ -27756,7 +27756,34 @@ How to answer:
 - State the figure plainly, then say how old it is: subtract the as_of value from the current time you were given, and say the age in seconds or minutes. The age of the answer matters as much as the answer.
 - Round money to whole dollars and percentages to one decimal place.
 - If the tables cannot answer the question, say exactly that and say what they do hold. Never estimate, extrapolate or invent a number.
-- Two or three sentences. You are speaking to a desk, not writing a report.`;
+- Two or three sentences. You are speaking to a desk, not writing a report.
+- Plain prose only. No markdown, no asterisks for emphasis, no bullet points, no headings: your answer is typed onto a screen verbatim and any formatting marks appear as literal characters.`;
+function forDisplay(tool, raw) {
+  try {
+    const j = JSON.parse(raw);
+    const rows = j?.rows ?? j;
+    if (tool === "listTopics" && Array.isArray(rows?.topics)) {
+      return rows.topics.map((t) => `${t.name}${t.status ? `  (${t.status})` : ""}`).join("\n");
+    }
+    if (tool === "getMetadata" && Array.isArray(rows?.columns)) {
+      return rows.columns.map((c) => `${c.name}  ${String(c?.type?.type ?? "").toLowerCase()}`).join("\n");
+    }
+    if (tool === "queryData") {
+      const cols = (rows?.schema?.columns ?? []).map((c) => String(c.name));
+      const data = rows?.data ?? [];
+      if (!data.length)
+        return "(no rows)";
+      const lines = data.slice(0, 12).map((d) => (Array.isArray(d) ? d : d?.row ?? []).map((v) => String(v)).join("   "));
+      const head = cols.length ? cols.join("   ") + "\n" : "";
+      const more = data.length > 12 ? `
+\u2026 ${data.length - 12} more rows` : "";
+      return head + lines.join("\n") + more;
+    }
+  } catch {
+  }
+  return raw.slice(0, 600);
+}
+__name(forDisplay, "forDisplay");
 async function* ask(question, deps) {
   const rtce = new RtceClient(deps.mcpUrl, deps.confluentKey, deps.confluentSecret);
   const anthropic = new Anthropic({ apiKey: deps.anthropicKey });
@@ -27821,7 +27848,7 @@ async function* ask(question, deps) {
       };
       try {
         const out = await rtce.callTool(block.name, args);
-        yield { kind: "result", tag: "Result", meta: block.name, code: out.slice(0, 1200) };
+        yield { kind: "result", tag: "Result", meta: block.name, code: forDisplay(block.name, out) };
         results.push({ type: "tool_result", tool_use_id: block.id, content: out });
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -27834,6 +27861,63 @@ async function* ask(question, deps) {
   yield { kind: "error", tag: "Gave up", body: `No answer after ${MAX_TURNS} turns.` };
 }
 __name(ask, "ask");
+
+// worker/produce.ts
+init_modules_watch_stub();
+function frame(schemaId, payload) {
+  const body = new TextEncoder().encode(JSON.stringify(payload));
+  const out = new Uint8Array(5 + body.length);
+  out[0] = 0;
+  out[1] = schemaId >>> 24 & 255;
+  out[2] = schemaId >>> 16 & 255;
+  out[3] = schemaId >>> 8 & 255;
+  out[4] = schemaId & 255;
+  out.set(body, 5);
+  let s = "";
+  for (const b of out)
+    s += String.fromCharCode(b);
+  return btoa(s);
+}
+__name(frame, "frame");
+function flinkTimestamp(d = /* @__PURE__ */ new Date()) {
+  return d.toISOString().replace("T", " ").replace("Z", "").slice(0, 23);
+}
+__name(flinkTimestamp, "flinkTimestamp");
+async function produceEvent(cfg2, event) {
+  const url = `${cfg2.restEndpoint}/kafka/v3/clusters/${cfg2.clusterId}/topics/raw_events/records`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Basic ${btoa(`${cfg2.key}:${cfg2.secret}`)}`
+    },
+    body: JSON.stringify({
+      key: { type: "STRING", data: event.acct },
+      value: { type: "BINARY", data: frame(cfg2.schemaId, event) }
+    })
+  });
+  const text = await res.text();
+  if (!res.ok)
+    throw new Error(`produce failed: ${res.status} ${text.slice(0, 300)}`);
+  try {
+    const body = JSON.parse(text);
+    if (body?.error_code && body.error_code >= 400) {
+      throw new Error(`produce refused: ${body.error_code} ${body.message ?? ""}`);
+    }
+  } catch (e) {
+    if (e instanceof Error && e.message.startsWith("produce refused"))
+      throw e;
+  }
+}
+__name(produceEvent, "produceEvent");
+function fillEvent(clientId, lots) {
+  return { acct: clientId, sym: "ESU6", qty: lots, px: 5414, ts: flinkTimestamp(), kind: "fill" };
+}
+__name(fillEvent, "fillEvent");
+function fatFingerEvent(clientId) {
+  return { acct: clientId, sym: "ESU6", qty: 24e5, px: 5412.25, ts: flinkTimestamp(), kind: "fat_finger" };
+}
+__name(fatFingerEvent, "fatFingerEvent");
 
 // worker/index.ts
 var ESCALATE_PCT = 85;
@@ -27867,7 +27951,7 @@ async function snapshot(env, clientId) {
     runQuery(c, `SELECT client_id, exposure_usd, limit_usd, limit_util_pct, as_of FROM client_exposure WHERE client_id = '${id}' LIMIT 1`),
     runQuery(c, `SELECT client_id, exposure_usd, limit_usd, limit_util_pct, as_of FROM client_exposure ORDER BY limit_util_pct DESC LIMIT ${BOOK_ROWS}`),
     runQuery(c, `SELECT client_id, symbol, quantity, price, event_time, source FROM positions WHERE client_id = '${id}' ORDER BY event_time DESC LIMIT 5`),
-    runQuery(c, `SELECT client_id, quantity, reject_reason, event_time FROM positions_dlq ORDER BY event_time DESC LIMIT 1`).catch(() => ({ columns: [], rows: [] })),
+    runQuery(c, `SELECT client_id, quantity, reject_reason, event_time FROM positions_dlq WHERE client_id = '${id}' ORDER BY event_time DESC LIMIT 1`).catch(() => ({ columns: [], rows: [] })),
     // Which feeds have actually produced anything. No GROUP BY on a Lightning Table, so
     // this reads the recent tail and collects the distinct sources from it.
     runQuery(c, `SELECT source FROM positions ORDER BY event_time DESC LIMIT 60`)
@@ -27939,6 +28023,20 @@ async function snapshot(env, clientId) {
   });
 }
 __name(snapshot, "snapshot");
+function produceConfig(env) {
+  const { CONFLUENT_REST_ENDPOINT, CONFLUENT_KAFKA_KEY, CONFLUENT_KAFKA_SECRET, RAW_EVENTS_SCHEMA_ID } = env;
+  if (!CONFLUENT_REST_ENDPOINT || !CONFLUENT_KAFKA_KEY || !CONFLUENT_KAFKA_SECRET || !RAW_EVENTS_SCHEMA_ID) {
+    return null;
+  }
+  return {
+    restEndpoint: CONFLUENT_REST_ENDPOINT,
+    clusterId: env.DEMO_CLUSTER_ID,
+    key: CONFLUENT_KAFKA_KEY,
+    secret: CONFLUENT_KAFKA_SECRET,
+    schemaId: Number(RAW_EVENTS_SCHEMA_ID)
+  };
+}
+__name(produceConfig, "produceConfig");
 function streamSteps(question, env) {
   const { readable, writable } = new TransformStream();
   const writer = writable.getWriter();
@@ -27995,8 +28093,15 @@ var worker_default = {
           return json({ error: "no question" }, 400);
         return streamSteps(question.trim(), env);
       }
-      if (url.pathname === "/api/fill" || url.pathname === "/api/fat-finger") {
-        return json({ error: "not implemented yet: see ticket 10" }, 501);
+      if ((url.pathname === "/api/fill" || url.pathname === "/api/fat-finger") && req.method === "POST") {
+        const cfg2 = produceConfig(env);
+        if (!cfg2)
+          return json({ error: "producing needs the cluster REST endpoint, a Kafka key and the events schema id" }, 503);
+        const body = await req.json().catch(() => ({}));
+        const clientId = body.clientId ?? "4417";
+        const event = url.pathname === "/api/fill" ? fillEvent(clientId, body.lots ?? 1200) : fatFingerEvent(clientId);
+        await produceEvent(cfg2, event);
+        return json({ produced: event });
       }
       return json({ error: "not found" }, 404);
     } catch (e) {
@@ -28048,7 +28153,7 @@ var jsonError = /* @__PURE__ */ __name(async (request, env, _ctx, middlewareCtx)
 }, "jsonError");
 var middleware_miniflare3_json_error_default = jsonError;
 
-// .wrangler/tmp/bundle-ZJIqQE/middleware-insertion-facade.js
+// .wrangler/tmp/bundle-3DcRFk/middleware-insertion-facade.js
 var __INTERNAL_WRANGLER_MIDDLEWARE__ = [
   middleware_ensure_req_body_drained_default,
   middleware_miniflare3_json_error_default
@@ -28081,7 +28186,7 @@ function __facade_invoke__(request, env, ctx, dispatch, finalMiddleware) {
 }
 __name(__facade_invoke__, "__facade_invoke__");
 
-// .wrangler/tmp/bundle-ZJIqQE/middleware-loader.entry.ts
+// .wrangler/tmp/bundle-3DcRFk/middleware-loader.entry.ts
 var __Facade_ScheduledController__ = class {
   constructor(scheduledTime, cron, noRetry) {
     this.scheduledTime = scheduledTime;
