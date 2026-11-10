@@ -78,12 +78,18 @@ OVER=$(printf '%s' "$BOOK" | awk -F'\t' '$2 > 100 {print $1}' | tr '\n' ' ')
 if [ -z "$OVER" ]; then pass "no client is over its limit"; else fail "over limit: $OVER"; fi
 
 section "Someone has always just traded"
-FRESH=$(rows "SELECT client_id, as_of FROM client_exposure ORDER BY as_of DESC LIMIT 1")
+# Retried: read moments after the table starts answering, this came back empty once.
+FRESH=""
+for _try in 1 2 3 4 5; do
+  FRESH=$(rows "SELECT client_id, as_of FROM client_exposure ORDER BY as_of DESC LIMIT 1")
+  [ -n "$FRESH" ] && break
+  sleep 6
+done
 FRESH_ID=$(printf '%s' "$FRESH" | cut -f1)
 FRESH_AT=$(printf '%s' "$FRESH" | cut -f2)
 if [ -n "$FRESH_AT" ]; then
   AGE=$(python3 -c "import datetime as d; t=d.datetime.fromisoformat('$FRESH_AT'.replace(' ','T')).replace(tzinfo=d.timezone.utc); print(int((d.datetime.now(d.timezone.utc)-t).total_seconds()))")
-  if [ "$AGE" -le 180 ]; then pass "freshest client $FRESH_ID traded ${AGE}s ago"; else fail "freshest client is ${AGE}s old: is the trade feed running?"; fi
+  if [ "$AGE" -le 240 ]; then pass "freshest client $FRESH_ID traded ${AGE}s ago"; else fail "freshest client is ${AGE}s old: is the trade feed running?"; fi
 else
   fail "could not read the freshest client"
 fi

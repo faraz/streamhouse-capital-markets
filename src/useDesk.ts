@@ -7,8 +7,13 @@ import { FOLLOWED } from './data/book';
 const POLL_MS = 2_000;
 /** Below this a client's exposure is too small to say anything about on stage. */
 const WORTH_FOLLOWING_PCT = 20;
-/** Past this age an auto-followed client is swapped for someone fresher. */
-const STALE_REFOLLOW_MS = 120_000;
+/**
+ * Past this age an auto-followed client is swapped for someone fresher. End to end the
+ * pipeline runs about 90 seconds under exactly-once (two hops, each waiting for a commit),
+ * so a client is already a minute or more old when followed. Two minutes made an idle
+ * screen swap clients every minute; five keeps it current without fidgeting.
+ */
+const STALE_REFOLLOW_MS = 300_000;
 const GATE = import.meta.env['VITE_DEMO_GATE'] ?? 'local-dev';
 
 export type Which = 'live' | 'simulator';

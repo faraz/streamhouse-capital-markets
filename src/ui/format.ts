@@ -17,9 +17,13 @@ export function wallClock(ms: number): string {
     .join(':');
 }
 
-/** Staleness, as the one signal the palette carries. */
+/**
+ * Staleness, as the one signal the palette carries. Green means as fresh as this design
+ * delivers: under exactly-once that is up to about three minutes, two commits end to end.
+ * Turning amber at 90 seconds painted the pipeline's normal operation as a warning.
+ */
 export function freshness(ms: number): 'fresh' | 'warn' | 'stale' {
-  return ms < 90_000 ? 'fresh' : ms < 600_000 ? 'warn' : 'stale';
+  return ms < 180_000 ? 'fresh' : ms < 600_000 ? 'warn' : 'stale';
 }
 
 export const PALETTE = {
