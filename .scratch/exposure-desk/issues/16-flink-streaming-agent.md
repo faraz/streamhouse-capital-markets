@@ -53,3 +53,12 @@ proven patterns and traps: `research/flink-materialized-tables-and-agents-2026-1
 - [ ] `verify.sh` checks the agent's statements are running, and the capacity check counts them
 - [ ] `HANDOFF.md`'s run-of-show has the 7:15 beat's real timing (the figure about 90 s after the click, the escalation after it, covered by an analyst question), and the console cutaway opens Materialized tables, then Streaming Agents (`risk_agent`)
 - [ ] Working by Wednesday 2026-11-11 evening; otherwise the threshold check is what is presented, and that is recorded here as the outcome
+
+**Found in 17 (2026-11-10):** after `regenerate.sh` creates `client_exposure`, the
+materialized table replays `positions` for about four minutes, and its rows move through
+partial totals while it does. A `client_escalations` statement started `FROM_NOW` straight
+after would see those replayed changes as new, and could run the agent on crossings from
+the past. Wait for the replay (90000's row present and a fresh `as_of`) before creating it,
+or filter on event time. Also: `CONTINUOUS` in `regenerate.sh` and the role list in
+`verify.sh` are fixed counts (11 and 10) that this ticket's statements must raise, and the
+materialized table's query is not in `statement list`, so verify cannot see it by name.

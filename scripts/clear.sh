@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
 # Stop the producers and clear the data, keeping everything Terraform owns.
 #
-# Goes: generator, then statements, then Lightning Tables, then topics. That order
-# matters. Deleting a topic while a Lightning Table sits over it orphans the table, and
-# deleting it while a statement writes to it fails the statement noisily.
+# Goes: generator, then statements, then Lightning Tables, then the materialized table,
+# then topics. That order matters. Deleting a topic while a Lightning Table sits over it
+# orphans the table, and deleting it while a statement writes to it fails the statement
+# noisily. The materialized table is deleted as itself, which takes its query, its topic and
+# its schemas with it: deleting only the topic would leave a table that no longer has one,
+# and the rebuild's CREATE would then collide with it.
 #
 # What survives: the environment, the cluster, the service accounts and their keys, and
 # the Flink compute pool, which costs nothing while no statement runs. Schema Registry
-# subjects also survive, so a rebuild re-registers the same schemas and gets the same ids.
+# subjects also survive, so a rebuild re-registers the same schemas and gets the same ids,
+# except client_exposure's, which go with the materialized table and come back identical.
 #
 # Rebuild with scripts/regenerate.sh.
 set -uo pipefail
@@ -29,8 +33,8 @@ for id in $(confluent connect cluster list --environment "$DEMO_ENVIRONMENT_ID" 
 done
 
 say "Flink statements"
-# Deleted rather than stopped: the aggregation's accumulated state must go, or a rebuild
-# would resume summing on top of figures that no longer exist.
+# Deleted rather than stopped, so nothing resumes on top of topics that are about to go. The
+# exposure figure's accumulated state is not here: it goes with the materialized table.
 for n in $(confluent flink statement list "${FLAGS_ENV[@]}" -o json 2>/dev/null \
            | jq -r '.[]|select(.name|startswith("cm-"))|.name'); do
   confluent flink statement stop "$n" "${FLAGS_ENV[@]}" >/dev/null 2>&1
@@ -44,6 +48,14 @@ for t in $(confluent rtce rtce-topic list --environment "$DEMO_ENVIRONMENT_ID" \
     --cluster "$DEMO_CLUSTER_ID" --force >/dev/null 2>&1 && echo "  deleted $t"
 done
 
+say "materialized tables"
+# Only this cluster's: the list spans the environment.
+for t in $(confluent flink materialized-table list "${FLAGS_ENV[@]}" -o json 2>/dev/null \
+           | jq -r --arg db "$DEMO_CLUSTER_ID" '.[]|select(.database==$db)|.name'); do
+  confluent flink materialized-table delete "$t" "${FLAGS_ENV[@]}" --database "$DEMO_CLUSTER_ID" --force >/dev/null 2>&1 \
+    && echo "  deleted $t" || echo "  could not delete $t"
+done
+
 say "topics"
 for t in $(confluent kafka topic list -o json 2>/dev/null \
            | jq -r '.[]|select(.name|startswith("_")|not)|.name'); do
@@ -53,6 +65,7 @@ done
 say "what is left"
 printf '  connectors: %s\n' "$(confluent connect cluster list --environment "$DEMO_ENVIRONMENT_ID" --cluster "$DEMO_CLUSTER_ID" -o json 2>/dev/null | jq -r 'length')"
 printf '  statements: %s\n' "$(confluent flink statement list "${FLAGS_ENV[@]}" -o json 2>/dev/null | jq -r '[.[]|select(.status=="RUNNING")]|length')"
+printf '  materialized tables: %s\n' "$(confluent flink materialized-table list "${FLAGS_ENV[@]}" -o json 2>/dev/null | jq -r 'length')"
 printf '  lightning tables: %s\n' "$(confluent rtce rtce-topic list --environment "$DEMO_ENVIRONMENT_ID" --cluster "$DEMO_CLUSTER_ID" -o json 2>/dev/null | jq -r 'length')"
 printf '  topics: %s\n' "$(confluent kafka topic list -o json 2>/dev/null | jq -r '[.[]|select(.name|startswith("_")|not)]|length')"
 echo

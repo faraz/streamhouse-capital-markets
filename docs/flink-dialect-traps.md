@@ -60,3 +60,28 @@ Severity: **MEDIUM**. `confluent flink shell` cannot take piped stdin: it exits 
 not available to a non-interactive agent. The workable substitute is to submit the
 statement and read `.status_detail` from `-o json`, which reports parse and type errors
 immediately and without consuming CFUs beyond the attempt.
+
+## A materialized table's query is not in the statement list
+
+Severity: **MEDIUM**. Found 2026-11-10 converting `client_exposure`.
+
+`CREATE MATERIALIZED TABLE` submitted with `confluent flink statement create` reaches
+COMPLETED: that statement is only the DDL. The continuous query it starts holds a CFU (the
+pool's count goes up by one) but does not appear in `confluent flink statement list`, and
+`confluent flink materialized-table list` gives no status, only `stopped`. So "is it
+running" cannot be read off a status field; check that the table exists and is not stopped,
+then check it is doing its job (a fresh `as_of`, a produced record converging).
+
+Two consequences for teardown:
+
+- Deleting the DDL statement leaves the materialized table and its query running. Delete it
+  as itself: `confluent flink materialized-table delete <name> --database <lkc> --force`,
+  which also deletes its topic and both Schema Registry subjects. Do it after the Lightning
+  Table over it and before the topic sweep, or the rebuild's CREATE collides with a table
+  whose topic is gone.
+- The pool frees the query's CFU about a minute after the delete, not at once.
+
+What did work as written: an explicit `NOT NULL` schema over `SUM(...)` and the division,
+`DISTRIBUTED BY (client_id) INTO 2 BUCKETS`, and a GROUP BY on `(client_id, limit_usd)`
+under a primary key of `client_id`. The registered key and value schemas are the same as
+the plain table's, record names included.

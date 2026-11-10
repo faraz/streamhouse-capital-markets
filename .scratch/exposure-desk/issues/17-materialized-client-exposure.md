@@ -16,7 +16,7 @@ Facts and traps: `research/flink-materialized-tables-and-agents-2026-11.md` §1 
 
 **Blocked by:** none.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] `client_exposure` is created by one `CREATE MATERIALIZED TABLE` whose query is the exposure aggregation, and `03` and `20` are gone from the rebuild
 - [ ] Its key is unchanged (primary key `client_id`, Avro key), so the Lightning Table, the Worker and the analyst read it without a change
@@ -30,3 +30,13 @@ Watch for: the grammar shows `DISTRIBUTED BY (col)`, not `HASH(col)`; the GROUP 
 `(client_id, limit_usd)` while the primary key is `client_id`; an explicit `NOT NULL`
 schema may reject `SUM` and the division as nullable; `DROP MATERIALIZED TABLE` deletes the
 topic and its schemas.
+
+**Outcome, 2026-11-10:** passing, ahead of the deadline. Rebuilt with `clear.sh` and
+`regenerate.sh`; `verify.sh` passed in full, converging on 90000 in 45 s. The key and value
+schemas registered for `client_exposure` are byte-identical to the plain table's. The pool
+runs 11 CFU with 10 statements listed: the materialized table's query holds a CFU but is
+not in the statement list and has no status, so verify checks it exists and is not stopped,
+and lets the fresh `as_of` and the convergence test prove it keeps the number. The book was
+partial for about four minutes after the rebuild while the table replayed `positions`. The
+console view under Materialized tables was not looked at; the CLI lists it as
+`client_exposure`. Traps recorded in `docs/flink-dialect-traps.md`.

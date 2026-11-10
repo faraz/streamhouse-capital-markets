@@ -49,7 +49,9 @@ submit() {
 
 # Each running statement holds at least one CFU. This run leaves CONTINUOUS statements
 # running and needs one more slot at a time for the bounded seeds, so check the pool has
-# room before changing anything rather than finding out halfway through.
+# room before changing anything rather than finding out halfway through. Ten normalizers and
+# guards, and the materialized table's query, which holds a CFU like any statement although
+# the statement list does not show it.
 CONTINUOUS=11
 capacity_check() {
   local pool max cur
@@ -124,7 +126,6 @@ fi
 say "tables"
 submit ddl-pos  flink/01-create-positions.sql
 submit ddl-lim  flink/02-create-client-limits.sql
-submit ddl-exp  flink/03-create-client-exposure.sql
 submit ddl-dlq  flink/06-create-positions-dlq.sql
 
 say "normalizers and guards, before any volume arrives"
@@ -151,8 +152,16 @@ submit seed-vpos flink/08-seed-verification-balance.sql
 for f in flink/generated/book-limits-*.sql; do submit "bk-$(basename "$f" .sql | sed 's/book-//')" "$f"; done
 for f in flink/generated/book-positions-*.sql; do submit "bk-$(basename "$f" .sql | sed 's/book-//')" "$f"; done
 
-say "the exposure aggregation"
-submit agg flink/20-aggregate-exposure.sql
+say "the exposure figure, as a materialized table"
+# After the seeds, because it reads positions from the beginning and its first commit should
+# hold the whole book; before the Lightning Tables, because it creates the topic they serve.
+# The create statement COMPLETES; the query it starts runs on under the table's own name.
+submit mt-exp flink/20-materialize-client-exposure.sql
+# The create's COMPLETED says only that the DDL ran, so the table is listed back.
+confluent flink materialized-table list "${FLAGS_ENV[@]}" -o json 2>/dev/null \
+  | jq -e '.[]|select(.name=="client_exposure" and .stopped == false)' >/dev/null \
+  || { echo "  client_exposure is not listed as a running materialized table" >&2; exit 1; }
+echo "  client_exposure listed, not stopped"
 
 say "Lightning Tables"
 # The description is the only documentation an MCP agent gets for a topic, and it is
@@ -212,4 +221,6 @@ fi
 
 say "done"
 echo "  Lightning Tables answer about a minute after they report ACTIVE."
+echo "  The book is partial for about four minutes more while client_exposure replays"
+echo "  positions, so a verify that fails only on the book needs waiting out."
 echo "  Check with: scripts/verify.sh"
