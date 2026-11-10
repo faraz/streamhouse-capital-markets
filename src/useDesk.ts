@@ -14,6 +14,8 @@ const WORTH_FOLLOWING_PCT = 20;
  * screen swap clients every minute; five keeps it current without fidgeting.
  */
 const STALE_REFOLLOW_MS = 300_000;
+/** Two exactly-once commits end to end, with room: how long a live reset can take to show. */
+const RESET_LANDS_MS = 120_000;
 const GATE = import.meta.env['VITE_DEMO_GATE'] ?? 'local-dev';
 
 export type Which = 'live' | 'simulator';
@@ -48,6 +50,10 @@ export function useDesk() {
   const [isolation, setIsolationState] = useState<Isolation>('committed');
   const [snapshot, setSnapshot] = useState<DeskSnapshot | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  // A live reset lands at the next commit, not at the click, so the screen says it is on its
+  // way for as long as that can take. Otherwise the figures sitting still read as a failure.
+  const resetAt = useRef<number | null>(null);
+  const resetLanding = () => resetAt.current !== null && Date.now() - resetAt.current < RESET_LANDS_MS;
 
   const source: ExposureSource = which === 'live' ? live : simulator;
 
@@ -56,7 +62,9 @@ export function useDesk() {
     try {
       const snap = await source.snapshot(client);
       setSnapshot(snap);
-      setNote(null);
+      setNote(resetLanding() && snap.origin === 'confluent'
+        ? 'Reset sent. The presenter fills are offset at the next commit, about 90 seconds.'
+        : null);
       const freshest = snap.active.find((c) => c.limitUtilPct >= WORTH_FOLLOWING_PCT) ?? snap.active[0];
       const live = snap.mode === 'streamhouse' && snap.origin === 'confluent';
       const stale = snap.clocks.servedAgeMs > STALE_REFOLLOW_MS;
@@ -105,6 +113,9 @@ export function useDesk() {
     isolation,
     setWhich,
     autoFollowing: autoFollow.current,
+    // A reset offsets only what has landed, so a second press before the first lands, or a
+    // press while a fill is in flight, would offset the wrong amount. Re-read every poll.
+    canReset: !resetLanding() && !snapshot?.pendingFill,
     setClient: (c: string) => {
       pickFreshest.current = false;
       autoFollow.current = false;
@@ -123,6 +134,15 @@ export function useDesk() {
     setIsolation: (i: Isolation) => setIsolationState(i),
     fill: async (lots: number) => { await source.produceFill(client, lots); await refresh(); },
     fatFinger: async () => { await source.produceFatFinger(client); await refresh(); },
-    reset: async () => { await source.reset(); await refresh(); },
+    reset: async () => {
+      try {
+        await source.reset();
+        resetAt.current = Date.now();
+      } catch (e) {
+        setNote(`reset failed: ${e instanceof Error ? e.message : e}`);
+        return;
+      }
+      await refresh();
+    },
   };
 }

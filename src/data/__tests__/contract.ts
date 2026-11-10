@@ -164,6 +164,28 @@ export function runContract(h: Harness): void {
     });
   });
 
+  describe(`${h.name}: reset`, () => {
+    it('puts a client the presenter filled back where an untouched one is, with nothing escalated', async () => {
+      // Between rehearsals, without a rebuild. Against a control, as with the fat finger,
+      // because jitter legitimately moves the figure while the reset lands.
+      const treated = await setup();
+      const control = await setup();
+      await treated.source.produceFill(FOLLOWED, DEFAULT_FILL_LOTS);
+      treated.advance(COMMIT_MS + MATERIALIZE_MS + 1_000);
+      control.advance(COMMIT_MS + MATERIALIZE_MS + 1_000);
+      expect((await treated.source.snapshot(FOLLOWED)).escalations).toHaveLength(1);
+
+      await treated.source.reset();
+      treated.advance(COMMIT_MS + MATERIALIZE_MS + 1_000);
+      control.advance(COMMIT_MS + MATERIALIZE_MS + 1_000);
+
+      const a = await treated.source.snapshot(FOLLOWED);
+      const b = await control.source.snapshot(FOLLOWED);
+      expect(a.served.exposureUsd).toBeCloseTo(b.served.exposureUsd, 0);
+      expect(a.escalations).toHaveLength(0);
+    });
+  });
+
   describe(`${h.name}: bounded jitter`, () => {
     it('never moves a client across a threshold on its own', async () => {
       const { source, advance } = await setup();

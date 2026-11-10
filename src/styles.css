@@ -106,6 +106,7 @@
     transition: color 120ms ease, border-color 120ms ease;
   }
   .ghost:hover { color: var(--paper); border-color: var(--paper); }
+  .ghost:disabled { opacity: 0.32; cursor: default; pointer-events: none; }
   .ghost:focus-visible { outline: 2px solid var(--paper); outline-offset: 2px; }
   .ghost[data-hot="true"] { color: var(--amber); border-color: rgba(255, 194, 75, 0.55); }
 

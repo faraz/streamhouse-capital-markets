@@ -10,7 +10,8 @@
  */
 import { num, rowsToObjects, runQuery, type QueryConfig } from '../src/data/query';
 import { ask } from './agent';
-import { fatFingerEvent, fillEvent, produceEvent, type ProduceConfig } from './produce';
+import { fatFingerEvent, fillEvent, flinkTimestamp, produceEvent, type ProduceConfig } from './produce';
+import { resetEvents } from './reset';
 import { thresholdEscalations } from './threshold';
 
 export interface Env {
@@ -156,6 +157,33 @@ async function snapshot(env: Env, clientId: string): Promise<Response> {
   });
 }
 
+/**
+ * Offsets what is left of the presenter's fills. Read from the served positions, fills and
+ * earlier resets alike, so nothing has to be remembered between requests. A Lightning Table
+ * returns at most 200 rows, so a full page is refused rather than half-offset: that would
+ * leave the book wrong and look right.
+ */
+async function reset(env: Env, producer: ProduceConfig): Promise<Response> {
+  const c = cfg(env);
+  const [fills, resets] = await Promise.all(
+    ['fill', 'reset'].map((kind) =>
+      runQuery(c, `SELECT client_id, quantity, price FROM positions WHERE source = '${kind}' LIMIT ${BOOK_ROWS}`),
+    ),
+  );
+  const filled = rowsToObjects(fills!);
+  const undone = rowsToObjects(resets!);
+  if (filled.length >= BOOK_ROWS || undone.length >= BOOK_ROWS) {
+    return json({ error: `more than ${BOOK_ROWS} presenter events to offset; rebuild instead` }, 409);
+  }
+  const events = resetEvents(
+    [...filled, ...undone].map((r) => ({ clientId: r['CLIENT_ID'] ?? '', quantity: num(r['QUANTITY']), price: num(r['PRICE']) })),
+    flinkTimestamp(),
+  );
+  // One at a time: each is checked, and a failure stops the rest rather than half-resetting quietly.
+  for (const e of events) await produceEvent(producer, e);
+  return json({ produced: events });
+}
+
 function produceConfig(env: Env): ProduceConfig | null {
   const { CONFLUENT_REST_ENDPOINT, CONFLUENT_KAFKA_KEY, CONFLUENT_KAFKA_SECRET, RAW_EVENTS_SCHEMA_ID } = env;
   if (!CONFLUENT_REST_ENDPOINT || !CONFLUENT_KAFKA_KEY || !CONFLUENT_KAFKA_SECRET || !RAW_EVENTS_SCHEMA_ID) {
@@ -229,9 +257,10 @@ export default {
         if (!question?.trim()) return json({ error: 'no question' }, 400);
         return streamSteps(question.trim(), env);
       }
-      if ((url.pathname === '/api/fill' || url.pathname === '/api/fat-finger') && req.method === 'POST') {
+      if ((url.pathname === '/api/fill' || url.pathname === '/api/fat-finger' || url.pathname === '/api/reset') && req.method === 'POST') {
         const cfg = produceConfig(env);
         if (!cfg) return json({ error: 'producing needs the cluster REST endpoint, a Kafka key and the events schema id' }, 503);
+        if (url.pathname === '/api/reset') return await reset(env, cfg);
         const body = (await req.json().catch(() => ({}))) as { clientId?: string; lots?: number };
         const clientId = body.clientId ?? '4417';
         const event =

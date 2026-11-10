@@ -53,8 +53,14 @@ export class LiveSource implements ExposureSource {
     await this.fallback.setIsolation(level);
   }
 
+  /**
+   * Offsets every fill the presenter has sent, on the live stack too, so the next run starts
+   * from the opening book without a rebuild. In either mode: Before mode shows the simulator,
+   * but the fills it offsets are in Confluent.
+   */
   async reset(): Promise<void> {
     await this.fallback.reset();
+    await this.post('/api/reset', {});
   }
 
   async produceFill(clientId: string, lots: number): Promise<void> {

@@ -71,6 +71,10 @@ function harness(opts: { viaGlobalFetch?: boolean } = {}) {
       await server.produceFill(body.clientId, body.lots);
       return new Response('{}', { status: 200 });
     }
+    if (url.includes('/api/reset')) {
+      await server.reset();
+      return new Response('{}', { status: 200 });
+    }
     if (url.includes('/api/fat-finger')) {
       const body = JSON.parse(String(init?.body ?? '{}'));
       await server.produceFatFinger(body.clientId);

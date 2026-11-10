@@ -219,8 +219,41 @@ if [ "$WITH_GEN" = "1" ]; then
   done
 fi
 
+say "waiting for the book to be right"
+# Not done until it is: for minutes after the create, client_exposure replays every position
+# and serves partial totals, and the screen would show them. Right means the deck's eight
+# head the book and the verification client has its row, read back by a real query, and with
+# the feeds on, that someone traded in the last four minutes. Ticket 16's agent must start
+# after this, or it takes the replay for new crossings.
+TOKEN=$(printf '%s:%s' "$CONFLUENT_GLOBAL_KEY" "$CONFLUENT_GLOBAL_SECRET" | base64)
+rows() {
+  curl -s --max-time 40 -X POST "$CONFLUENT_SQL_ENDPOINT" \
+    -H "Content-Type: application/json" -H "Authorization: Basic $TOKEN" \
+    -d "{\"catalog_name\":\"$DEMO_ENVIRONMENT_ID\",\"database_name\":\"$DEMO_CLUSTER_ID\",\"query\":\"$1\",\"max_result_rows\":200}" \
+    | jq -r '.result.data[]? | @tsv' 2>/dev/null
+}
+EXPECT=$(printf '%s\n' 2286 3318 4417 5560 6154 7405 8803 9021 | tr '\n' ' ')
+right=0
+for _try in $(seq 1 40); do
+  top=$(rows "SELECT client_id FROM client_exposure ORDER BY limit_util_pct DESC LIMIT 8" | sort | tr '\n' ' ')
+  verify=$(rows "SELECT client_id FROM client_exposure WHERE client_id = '90000' LIMIT 1")
+  fresh=1
+  if [ "$WITH_GEN" = "1" ]; then
+    at=$(rows "SELECT as_of FROM client_exposure ORDER BY as_of DESC LIMIT 1")
+    fresh=$(python3 -c "import datetime as d,sys; v='$at'.strip()
+if not v: print(0); sys.exit()
+t=d.datetime.fromisoformat(v.replace(' ','T')).replace(tzinfo=d.timezone.utc)
+print(1 if (d.datetime.now(d.timezone.utc)-t).total_seconds() <= 240 else 0)")
+  fi
+  if [ "$top" = "$EXPECT" ] && [ -n "$verify" ] && [ "$fresh" = "1" ]; then right=1; break; fi
+  sleep 15
+done
+if [ "$right" = "1" ]; then
+  echo "  the deck's eight head the book, 90000 has its row, and the figures are current"
+else
+  echo "  the book was still not right after 10 minutes: run scripts/verify.sh to see what is off" >&2
+  exit 1
+fi
+
 say "done"
-echo "  Lightning Tables answer about a minute after they report ACTIVE."
-echo "  The book is partial for about four minutes more while client_exposure replays"
-echo "  positions, so a verify that fails only on the book needs waiting out."
 echo "  Check with: scripts/verify.sh"

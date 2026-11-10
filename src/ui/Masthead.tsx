@@ -27,6 +27,7 @@ interface Props {
   onFill(): void;
   onFatFinger(): void;
   onReset(): void;
+  canReset: boolean;
 }
 
 /**
@@ -138,7 +139,7 @@ export function Masthead(p: Props) {
           <button type="button" className="ghost" onClick={p.onFatFinger}>
             Send a fat finger
           </button>
-          <button type="button" className="ghost" onClick={p.onReset}>
+          <button type="button" className="ghost" disabled={!p.canReset} onClick={p.onReset}>
             Reset
           </button>
 

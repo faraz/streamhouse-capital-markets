@@ -44,7 +44,7 @@ function frame(schemaId: number, payload: unknown): string {
 }
 
 /** Flink's TO_TIMESTAMP wants a space separator; an ISO-8601 'T' fails to cast. */
-function flinkTimestamp(d = new Date()): string {
+export function flinkTimestamp(d = new Date()): string {
   return d.toISOString().replace('T', ' ').replace('Z', '').slice(0, 23);
 }
 
@@ -77,9 +77,12 @@ export async function produceEvent(cfg: ProduceConfig, event: DemoEvent): Promis
   }
 }
 
+/** The price every presenter fill is struck at, so a reset can offset it exactly. */
+export const FILL_PX = 5414.0;
+
 /** A fill large enough to cross the escalation threshold from anywhere in the band. */
 export function fillEvent(clientId: string, lots: number): DemoEvent {
-  return { acct: clientId, sym: 'ESU6', qty: lots, px: 5414.0, ts: flinkTimestamp(), kind: 'fill' };
+  return { acct: clientId, sym: 'ESU6', qty: lots, px: FILL_PX, ts: flinkTimestamp(), kind: 'fill' };
 }
 
 /** Well formed, and perfectly wrong: one zero too many. */

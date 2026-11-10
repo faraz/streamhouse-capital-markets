@@ -36,6 +36,7 @@ export default function App() {
         onFill={() => void desk.fill(DEFAULT_FILL_LOTS)}
         onFatFinger={() => void desk.fatFinger()}
         onReset={() => void desk.reset()}
+        canReset={desk.canReset}
       />
 
       {desk.note ? <p className="banner">{desk.note}</p> : null}

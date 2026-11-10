@@ -20,3 +20,17 @@ between rehearsals.
 end, because an untested teardown is how people discover surprise bills. A lighter lever
 exists for same-day rehearsals: pause the Flink statements and the Datagen connectors,
 which are the two largest meters, without destroying the environment.
+
+## Amended 2026-11-10: up from now until the talk
+
+With two days to go, the stack stays up through Thursday rather than coming down between
+rehearsals. A rebuild is the slow way to start over: `client_exposure` replays every position
+and serves partial totals for about four minutes, and the demo has to be right whenever the
+screen is opened. Starting over is the screen's Reset instead, which offsets the presenter's
+fills on the live stack and lands at the next commit.
+
+Eleven statements at the unconfirmed $0.21 per CFU-hour are about $55 a day, plus the
+Lightning Tables, inside the credit. A rebuild is now for a broken stack only, and
+`regenerate.sh` does not finish until the book is right. The pause lever above is untested
+since `client_exposure` became a materialized table: resuming one is REST or Terraform
+only, so do not pause it before the talk without trying the resume first.
