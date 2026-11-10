@@ -87,6 +87,11 @@ say "schemas on the raw topics"
 # reference puts that at ten to fifteen seconds, and the first run of this script died on
 # the fourth topic for exactly that reason. A duplicate seed is harmless: these records
 # only register a schema, and a normalizer counts nothing that arrived before it started.
+# They are booked to the verification client 90000 and to no one in the deck: most of these
+# sources carry no time, so a seed is stamped as it arrives, and on a deck client it read as a
+# fresh trade, put 8803 and 6154 over the line in the threshold check for ten minutes after
+# every rebuild, and moved 4417 off the deck's 364,300,640. 90000 has a $100m limit and sits
+# near 55%; these take it to about 67%.
 produce() {
   local attempt
   for attempt in 1 2 3 4 5 6; do
@@ -101,13 +106,13 @@ produce() {
   echo "  FAILED to seed $1 after 6 attempts" >&2
   return 1
 }
-produce raw_mq_intraday     terraform/schemas/raw.mq_intraday.avsc    '{"acct":"4417","sym":"ESU6","qty":240,"px":5412.25,"ts":"2026-11-09 14:06:19"}'
-produce raw_venue           terraform/schemas/raw.venue.avsc          '{"acct":"4417","sym":"ESU6","q":120,"p":5412.5}'
-produce raw_desk_sheet      terraform/schemas/raw.desk_sheet.avsc     '{"account":"6154","symbol":"NQZ6","quantity":"300","price":"20114.75"}'
-produce raw_custodial       terraform/schemas/raw.custodial.avsc      '{"acct_no":"8803","instrument":"ESU6","units":440,"value_cents":238139000}'
-produce raw_clearing        terraform/schemas/raw.clearing.avsc       '{"acct":"3318","total_due_cents":1412000,"statement_date":"2026-11-08"}'
-produce raw_book_of_record  terraform/schemas/raw.book_of_record.avsc '{"client":"9021","sym":"ESU6","qty":310,"px":5413.0,"change_type":"INSERT","changed_at":"2026-11-09 14:12:40"}'
-produce raw_trades          terraform/schemas/raw.trades.avsc         '{"acct":10000,"sym":"ESU6","qty":100,"px":5412.0}'
+produce raw_mq_intraday     terraform/schemas/raw.mq_intraday.avsc    '{"acct":"90000","sym":"ESZ6","qty":240,"px":5412.25,"ts":"2026-11-09 14:06:19"}'
+produce raw_venue           terraform/schemas/raw.venue.avsc          '{"acct":"90000","sym":"ESZ6","q":120,"p":5412.5}'
+produce raw_desk_sheet      terraform/schemas/raw.desk_sheet.avsc     '{"account":"90000","symbol":"NQZ6","quantity":"300","price":"20114.75"}'
+produce raw_custodial       terraform/schemas/raw.custodial.avsc      '{"acct_no":"90000","instrument":"ESZ6","units":440,"value_cents":238139000}'
+produce raw_clearing        terraform/schemas/raw.clearing.avsc       '{"acct":"90000","total_due_cents":1412000,"statement_date":"2026-11-08"}'
+produce raw_book_of_record  terraform/schemas/raw.book_of_record.avsc '{"client":"90000","sym":"ESZ6","qty":310,"px":5413.0,"change_type":"INSERT","changed_at":"2026-11-09 14:12:40"}'
+produce raw_trades          terraform/schemas/raw.trades.avsc         '{"acct":90000,"sym":"ESZ6","qty":100,"px":5412.0}'
 
 say "the events topic's JSON Schema"
 SCHEMA=$(jq -c -n '{type:"object",title:"DemoEvent",properties:{acct:{type:"string"},sym:{type:"string"},qty:{type:"integer"},px:{type:"number"},ts:{type:"string"},kind:{type:"string"}},required:["acct","sym","qty","px","ts","kind"],additionalProperties:false}')
@@ -192,7 +197,7 @@ warm_dlq() {
 import base64, json, struct, sys, datetime
 sid = int(sys.argv[1])
 ts = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d %H:%M:%S.%f')[:23]
-payload = json.dumps({"acct": "90000", "sym": "ESU6", "qty": 2400000, "px": 5412.0, "ts": ts, "kind": "setup"}).encode()
+payload = json.dumps({"acct": "90000", "sym": "ESZ6", "qty": 2400000, "px": 5412.0, "ts": ts, "kind": "setup"}).encode()
 framed = b"\x00" + struct.pack(">I", sid) + payload
 print(json.dumps({"key": {"type": "STRING", "data": "90000"},
                   "value": {"type": "BINARY", "data": base64.b64encode(framed).decode()}}))

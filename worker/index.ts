@@ -12,6 +12,7 @@ import { num, rowsToObjects, runQuery, type QueryConfig } from '../src/data/quer
 import { ask } from './agent';
 import { fatFingerEvent, fillEvent, flinkTimestamp, produceEvent, type ProduceConfig } from './produce';
 import { resetEvents } from './reset';
+import { FILL_LOTS } from '../src/data/fill';
 import { thresholdEscalations } from './threshold';
 
 export interface Env {
@@ -31,6 +32,11 @@ export interface Env {
 }
 
 const BOOK_ROWS = 200;
+/**
+ * How long a rejected record stays on screen after it was sent. The guard commits it within a
+ * minute; past a few, a rehearsal's fat finger would still be showing in the next run.
+ */
+const REJECT_SHOWN_MS = 180_000;
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -65,7 +71,7 @@ async function snapshot(env: Env, clientId: string): Promise<Response> {
   const [servedQ, bookQ, recentQ, dlqQ, srcQ, activeQ] = await Promise.all([
     runQuery(c, `SELECT client_id, exposure_usd, limit_usd, limit_util_pct, as_of FROM client_exposure WHERE client_id = '${id}' LIMIT 1`),
     runQuery(c, `SELECT client_id, exposure_usd, limit_usd, limit_util_pct, as_of FROM client_exposure ORDER BY limit_util_pct DESC LIMIT ${BOOK_ROWS}`),
-    runQuery(c, `SELECT client_id, symbol, quantity, price, event_time, source FROM positions WHERE client_id = '${id}' ORDER BY event_time DESC LIMIT 5`),
+    runQuery(c, `SELECT client_id, symbol, quantity, price, event_time, source, ingest_lag_ms FROM positions WHERE client_id = '${id}' ORDER BY event_time DESC LIMIT 5`),
     runQuery(c, `SELECT client_id, quantity, reject_reason, event_time FROM positions_dlq WHERE client_id = '${id}' ORDER BY event_time DESC LIMIT 1`).catch(() => ({ columns: [], rows: [] })),
     // Which feeds have actually produced anything. No GROUP BY on a Lightning Table, so
     // this reads the recent tail and collects the distinct sources from it.
@@ -109,9 +115,10 @@ async function snapshot(env: Env, clientId: string): Promise<Response> {
     price: num(r['PRICE']),
     eventTimeMs: tsToMs(r['EVENT_TIME']),
     source: r['SOURCE'] ?? '',
+    ingestLagMs: num(r['INGEST_LAG_MS']),
   }));
 
-  const dlqRow = rowsToObjects(dlqQ)[0];
+  const dlqRow = rowsToObjects(dlqQ).find((r) => Date.now() - tsToMs(r['EVENT_TIME']) <= REJECT_SHOWN_MS);
   const rejected = dlqRow
     ? {
         raw: `MSG|ACCT=${dlqRow['CLIENT_ID']}|QTY=${Math.round(num(dlqRow['QUANTITY']))}`,
@@ -135,7 +142,8 @@ async function snapshot(env: Env, clientId: string): Promise<Response> {
         notionalUsd: newest.quantity * newest.price,
         eventTime: newest.eventTimeMs,
         source: newest.source,
-        ageMs: 0,
+        // Stamped by the normalizing statement: how stale the feed was when it arrived.
+        ageMs: newest.ingestLagMs,
       }
     : null;
 
@@ -265,7 +273,7 @@ export default {
         const clientId = body.clientId ?? '4417';
         const event =
           url.pathname === '/api/fill'
-            ? fillEvent(clientId, body.lots ?? 1200)
+            ? fillEvent(clientId, body.lots ?? FILL_LOTS)
             : fatFingerEvent(clientId);
         await produceEvent(cfg, event);
         return json({ produced: event });

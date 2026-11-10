@@ -5,7 +5,7 @@ client against its limit and escalating to the risk officer before a breach. Fli
 the crossing all the time; the agent thinks only when one happens. It reads what pushed
 the client over through the same MCP server the analyst uses, and writes one or two
 sentences for the risk officer, for example: "Client 4417 crossed 85% at 14:21:07 on a
-1,200-lot ESU6 fill from the presenter's events; now 91.2% of a $112m limit."
+5,000-lot ESZ6 fill from the presenter's events; now 87.4% of a $450m limit."
 
 The agent never touches an order path. Its only action is getting a person there in time.
 

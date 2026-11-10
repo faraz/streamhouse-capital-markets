@@ -9,6 +9,15 @@
 -- what carries the book's existing exposure, so the sum is a genuine running total. It reads
 -- positions from the beginning, so it is created after the seeds have landed.
 --
+-- The presenter's events (a fill, a reset, verify's probe) are read straight off raw_events
+-- rather than through positions. Each Flink hop a reader waits on costs up to one commit, so
+-- through positions a fill took two, about a minute on average and two at worst; read here it
+-- takes one, still exactly once. 17 goes on writing them to positions for the record and for
+-- reset, so those copies are left out of the positions branch; the guard's bound is applied
+-- here as it is there, so a fat finger is no more counted than it was. A new kind of event
+-- has to join the list below, or it would be counted twice: verify's convergence check, which
+-- expects its own fill counted once to the dollar, is what would catch it.
+--
 -- The join against client_limits is a regular join rather than a lookup, which keeps the
 -- limits table in state. With eight thousand small rows that is cheap.
 --
@@ -47,6 +56,16 @@ AS SELECT
   l.limit_usd,
   (SUM(p.notional_usd) / l.limit_usd) * 100 AS limit_util_pct,
   MAX(p.event_time) AS as_of
-FROM positions p
+FROM (
+  SELECT client_id, notional_usd, event_time
+  FROM positions
+  WHERE source NOT IN ('fill', 'fat_finger', 'reset', 'verify', 'setup')
+  UNION ALL
+  -- TO_TIMESTAMP is nullable and the declared schema is not, so the type is pinned with a
+  -- COALESCE whose fallback the filter makes unreachable.
+  SELECT acct, CAST(qty AS DOUBLE) * px, COALESCE(TO_TIMESTAMP(ts), TIMESTAMP '1970-01-01 00:00:00')
+  FROM raw_events
+  WHERE ABS(CAST(qty AS INT)) <= 50000 AND TO_TIMESTAMP(ts) IS NOT NULL
+) p
 JOIN client_limits l ON p.client_id = l.client_id
 GROUP BY p.client_id, l.limit_usd;

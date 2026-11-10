@@ -1,3 +1,7 @@
+import { FILL_PX, FILL_SYMBOL } from '../src/data/fill';
+
+export { FILL_PX };
+
 /**
  * Producing the presenter's narrative events.
  *
@@ -77,15 +81,12 @@ export async function produceEvent(cfg: ProduceConfig, event: DemoEvent): Promis
   }
 }
 
-/** The price every presenter fill is struck at, so a reset can offset it exactly. */
-export const FILL_PX = 5414.0;
-
 /** A fill large enough to cross the escalation threshold from anywhere in the band. */
 export function fillEvent(clientId: string, lots: number): DemoEvent {
-  return { acct: clientId, sym: 'ESU6', qty: lots, px: FILL_PX, ts: flinkTimestamp(), kind: 'fill' };
+  return { acct: clientId, sym: FILL_SYMBOL, qty: lots, px: FILL_PX, ts: flinkTimestamp(), kind: 'fill' };
 }
 
 /** Well formed, and perfectly wrong: one zero too many. */
 export function fatFingerEvent(clientId: string): DemoEvent {
-  return { acct: clientId, sym: 'ESU6', qty: 2_400_000, px: 5412.25, ts: flinkTimestamp(), kind: 'fat_finger' };
+  return { acct: clientId, sym: 'ESZ6', qty: 2_400_000, px: 5412.25, ts: flinkTimestamp(), kind: 'fat_finger' };
 }

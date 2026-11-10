@@ -29,7 +29,7 @@ export function resetEvents(rows: FillRow[], ts: string): DemoEvent[] {
     let left = -Math.round(notional / FILL_PX);
     while (left !== 0) {
       const qty = Math.sign(left) * Math.min(Math.abs(left), DESK_BOUND_LOTS);
-      out.push({ acct, sym: 'ESU6', qty, px: FILL_PX, ts, kind: 'reset' });
+      out.push({ acct, sym: 'ESZ6', qty, px: FILL_PX, ts, kind: 'reset' });
       left -= qty;
     }
   }

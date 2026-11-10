@@ -2,7 +2,8 @@ import type {
   Clock, ClientExposure, DeskSnapshot, Escalation, EscalationAuthor, ExposureSource,
   Isolation, Mode, NormalizedRecord, Position, RejectedRecord, SourceAge,
 } from './types';
-import { Simulator, OPENING_MS } from './simulator';
+import { COMMIT_MS, Simulator } from './simulator';
+import { FILL_PX } from './fill';
 import { LIVE_BOOK_OF_RECORD, SOURCES } from './sources';
 
 /**
@@ -28,8 +29,15 @@ export class LiveSource implements ExposureSource {
   private readonly gate: string;
   private readonly clock: Clock;
   private readonly doFetch: typeof fetch;
-  /** Answers Before mode, and stands in whenever the network fails. */
+  /** Answers Before mode, which has no Confluent in it. Nothing in Streamhouse mode reads it. */
   private readonly fallback: Simulator;
+  /**
+   * The fills this screen has sent, each with the event time the Worker stamped on it. One is
+   * in flight until its client's served as_of reaches that time: as_of is the newest event the
+   * figure includes, so that is the moment the figure has it. Read off the live answer rather
+   * than predicted, so it holds for any client and however long the commit takes.
+   */
+  private inFlight: Array<{ clientId: string; lots: number; eventMs: number }> = [];
   private mode: Mode = 'streamhouse';
   private isolation: Isolation = 'committed';
 
@@ -64,14 +72,14 @@ export class LiveSource implements ExposureSource {
   }
 
   async produceFill(clientId: string, lots: number): Promise<void> {
-    await this.fallback.produceFill(clientId, lots);
-    if (this.mode === 'before') return;
-    await this.post('/api/fill', { clientId, lots });
+    if (this.mode === 'before') return this.fallback.produceFill(clientId, lots);
+    const { produced } = (await this.post('/api/fill', { clientId, lots })) as { produced?: { ts?: string } };
+    const eventMs = produced?.ts ? Date.parse(produced.ts.replace(' ', 'T') + 'Z') : NaN;
+    if (Number.isFinite(eventMs)) this.inFlight.push({ clientId, lots, eventMs });
   }
 
   async produceFatFinger(clientId: string): Promise<void> {
-    await this.fallback.produceFatFinger(clientId);
-    if (this.mode === 'before') return;
+    if (this.mode === 'before') return this.fallback.produceFatFinger(clientId);
     await this.post('/api/fat-finger', { clientId });
   }
 
@@ -85,23 +93,37 @@ export class LiveSource implements ExposureSource {
     );
     if (!res.ok) throw new Error(`snapshot failed: ${res.status}`);
     const wire = (await res.json()) as WireSnapshot;
-    // A fill the screen posted is known to the screen before the served figure catches
-    // up, so what is still in flight is tracked here rather than asked for.
-    const own = await this.fallback.snapshot(clientId);
-    return this.toSnapshot(clientId, wire, own.pendingFill);
+    return this.toSnapshot(clientId, wire, this.pendingFor(clientId, wire.served.asOfMs));
+  }
+
+  /** The newest fill sent for this client that its served figure does not yet include. */
+  private pendingFor(clientId: string, servedAsOfMs: number): DeskSnapshot['pendingFill'] {
+    const mine = this.inFlight.filter((f) => f.clientId === clientId);
+    const landed = mine.filter((f) => servedAsOfMs >= f.eventMs);
+    if (landed.length) this.inFlight = this.inFlight.filter((f) => !landed.includes(f));
+    const open = mine.filter((f) => servedAsOfMs < f.eventMs).at(-1);
+    if (!open) return null;
+    return {
+      atMs: open.eventMs,
+      lots: open.lots,
+      notionalUsd: open.lots * FILL_PX,
+      // One commit at most, now that presenter events reach the figure in a single hop.
+      visibleAtMs: open.eventMs + COMMIT_MS,
+    };
   }
 
   private headers(): Record<string, string> {
     return this.gate ? { 'x-demo-gate': this.gate } : {};
   }
 
-  private async post(path: string, body: unknown): Promise<void> {
+  private async post(path: string, body: unknown): Promise<unknown> {
     const res = await this.doFetch(`${this.base}${path}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...this.headers() },
       body: JSON.stringify(body),
     });
     if (!res.ok) throw new Error(`${path} failed: ${res.status}`);
+    return res.json().catch(() => ({}));
   }
 
   /**
@@ -149,7 +171,7 @@ export class LiveSource implements ExposureSource {
 
     const normalized: NormalizedRecord = wire.normalized ?? {
       clientId,
-      symbol: 'ESU6',
+      symbol: 'ESZ6',
       quantity: 0,
       price: 0,
       notionalUsd: 0,

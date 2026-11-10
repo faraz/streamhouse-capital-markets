@@ -4,6 +4,7 @@ import type {
 } from './types';
 import { buildBook, DECK_CLIENTS, FOLLOWED, STALE_REPORTED } from './book';
 import { LIVE_BOOK_OF_RECORD, SOURCES } from './sources';
+import { FILL_LOTS, FILL_PX } from './fill';
 
 /** Flink commits transactions about once a minute. That, not the table, is the minute. */
 export const COMMIT_MS = 60_000;
@@ -17,13 +18,10 @@ export const MATERIALIZE_MS = 100;
  * as a date, and an offset showed every fact as having happened in 1970. */
 export const OPENING_MS = Date.UTC(2026, 10, 9, 14, 6, 22);
 
-const NOTIONAL_PER_LOT = 18.4e6 / 850;
-/**
- * Sized so that it crosses the escalation threshold from anywhere inside the jitter
- * band. A fill that only *sometimes* escalates would be a demo that sometimes fails on
- * stage, so this is deliberately larger than the prototype's 850.
- */
-export const DEFAULT_FILL_LOTS = 1200;
+/** Priced as the live stack prices it, so the two cannot tell different stories. */
+const NOTIONAL_PER_LOT = FILL_PX;
+/** The presenter's fill, sized in fill.ts to cross the escalation line from anywhere. */
+export const DEFAULT_FILL_LOTS = FILL_LOTS;
 
 /** Where the streaming agent escalates, and where "near a limit" begins. */
 const ESCALATE_PCT = 85;
@@ -189,7 +187,7 @@ export class Simulator implements ExposureSource {
           out.push({
             at: OPENING_MS + e.atMs,
             title: 'Flink validation',
-            what: 'A 2,400,000 lot on ESU6 was rejected to positions.dlq. The exposure figure never moved.',
+            what: 'A 2,400,000 lot on ESZ6 was rejected to positions.dlq. The exposure figure never moved.',
             tone: 'warn',
             author: 'simulator',
           });
@@ -209,7 +207,7 @@ export class Simulator implements ExposureSource {
           title: 'Escalated to the risk officer',
           // A note, as the risk agent writes one: the client, when, the fill that did it,
           // and where it stands. A fallback then changes the author, not what is said.
-          what: `Client ${e.clientId} crossed ${ESCALATE_PCT}% at ${new Date(crossedAt).toISOString().slice(11, 19)} on a ${e.lots.toLocaleString('en-US')} lot ESU6 fill; now ${after.limitUtilPct.toFixed(1)}% of a $${Math.round(after.limitUsd / 1e6)}m limit.`,
+          what: `Client ${e.clientId} crossed ${ESCALATE_PCT}% at ${new Date(crossedAt).toISOString().slice(11, 19)} on a ${e.lots.toLocaleString('en-US')} lot ESZ6 fill; now ${after.limitUtilPct.toFixed(1)}% of a $${Math.round(after.limitUsd / 1e6)}m limit.`,
           tone: 'warn',
           author: 'simulator',
         });
@@ -257,7 +255,7 @@ export class Simulator implements ExposureSource {
     );
     const rejected: RejectedRecord | null = fatFinger
       ? {
-          raw: 'MSG|ACCT=4417|SYM=ESU6|QTY=+2400000|PX=5412.25',
+          raw: 'MSG|ACCT=4417|SYM=ESZ6|QTY=+2400000|PX=5412.25',
           reason: 'Quantity exceeds the desk bound of 50,000 lots',
           topic: 'positions_dlq',
         }
@@ -265,7 +263,7 @@ export class Simulator implements ExposureSource {
 
     const normalized: NormalizedRecord = {
       clientId,
-      symbol: 'ESU6',
+      symbol: 'ESZ6',
       quantity: 240,
       price: 5412.25,
       notionalUsd: 240 * 5412.25,
@@ -284,7 +282,7 @@ export class Simulator implements ExposureSource {
 
     const recent: Position[] = [{
       clientId,
-      symbol: 'ESU6',
+      symbol: 'ESZ6',
       quantity: pending ? pending.lots : 240,
       price: pending ? 5414.0 : 5412.25,
       eventTime: pending ? pending.atMs : t - 3000,

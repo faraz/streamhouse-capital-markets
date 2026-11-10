@@ -36,7 +36,7 @@ describe('simulator: determinism', () => {
 
 describe('simulator: the escalation reads like the risk agent will', () => {
   // The fill lands at 14:06:22 and Flink commits it at the next minute, 14:07:22. 4417 is
-  // at about 81% of a $450m limit, and 1,200 lots add about $26m, so it reads near 86.7%.
+  // at about 81% of a $450m limit, and 5,000 lots at 5,414 add $27.07m, so it reads near 87%.
   it('is a note naming the client, when it crossed, the fill and where it now stands', async () => {
     const { source, advance } = harness();
     await source.produceFill(FOLLOWED, DEFAULT_FILL_LOTS);
@@ -45,7 +45,7 @@ describe('simulator: the escalation reads like the risk agent will', () => {
     const [e] = (await source.snapshot(FOLLOWED)).escalations;
     expect(e!.author).toBe('simulator');
     expect(e!.what).toMatch(
-      /^Client 4417 crossed 85% at 14:07:22 on a 1,200 lot ESU6 fill; now 8[67]\.\d% of a \$450m limit\.$/,
+      /^Client 4417 crossed 85% at 14:07:22 on a 5,000 lot ESZ6 fill; now 8[67]\.\d% of a \$450m limit\.$/,
     );
   });
 });

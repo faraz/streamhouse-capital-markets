@@ -132,7 +132,16 @@ export function useDesk() {
       setModeState(m);
     },
     setIsolation: (i: Isolation) => setIsolationState(i),
-    fill: async (lots: number) => { await source.produceFill(client, lots); await refresh(); },
+    // Always 4417, the client the talk follows, and the screen goes with it: auto-following
+    // lands on whichever feed client traded last, and a fill there crosses nothing and is
+    // not the story.
+    fill: async (lots: number) => {
+      pickFreshest.current = false;
+      autoFollow.current = false;
+      setClientState(FOLLOWED);
+      await source.produceFill(FOLLOWED, lots);
+      await refresh();
+    },
     fatFinger: async () => { await source.produceFatFinger(client); await refresh(); },
     reset: async () => {
       try {

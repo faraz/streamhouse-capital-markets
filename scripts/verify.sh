@@ -146,6 +146,27 @@ if [ "$QUICK" = "1" ]; then
   printf '  something failed\n'; exit 1
 fi
 
+# One record for the verification client on the events topic, framed as the Worker frames
+# them. Succeeds only on HTTP 200: the produce is checked, not assumed.
+produce_verify() {
+  local code
+  code=$(curl -s --max-time 40 -o /dev/null -w '%{http_code}' -X POST \
+    "$CONFLUENT_REST_ENDPOINT/kafka/v3/clusters/$DEMO_CLUSTER_ID/topics/raw_events/records" \
+    -H "Content-Type: application/json" \
+    -u "$CONFLUENT_KAFKA_KEY:$CONFLUENT_KAFKA_SECRET" \
+    -d "$(python3 - "$VERIFY_CLIENT" "$1" "$FILL_PX" "$RAW_EVENTS_SCHEMA_ID" <<'PY'
+import base64, json, struct, sys, datetime
+acct, lots, px, sid = sys.argv[1], int(sys.argv[2]), float(sys.argv[3]), int(sys.argv[4])
+ts = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d %H:%M:%S.%f')[:23]
+payload = json.dumps({"acct": acct, "sym": "ESZ6", "qty": lots, "px": px, "ts": ts, "kind": "verify"}).encode()
+framed = b"\x00" + struct.pack(">I", sid) + payload
+print(json.dumps({"key": {"type": "STRING", "data": acct},
+                  "value": {"type": "BINARY", "data": base64.b64encode(framed).decode()}}))
+PY
+)")
+  [ "$code" = "200" ]
+}
+
 section "Convergence: does a produced record reach the served figure?"
 BEFORE=$(rows "SELECT exposure_usd FROM client_exposure WHERE client_id = '$VERIFY_CLIENT' LIMIT 1")
 if [ -z "$BEFORE" ]; then
@@ -154,20 +175,7 @@ else
   EXPECTED=$(python3 -c "print(float('$BEFORE') + $FILL_LOTS * $FILL_PX)")
   printf '  client %s: %s, expecting %s\n' "$VERIFY_CLIENT" "$BEFORE" "$EXPECTED"
 
-  curl -s --max-time 40 -o /dev/null -X POST \
-    "$CONFLUENT_REST_ENDPOINT/kafka/v3/clusters/$DEMO_CLUSTER_ID/topics/raw_events/records" \
-    -H "Content-Type: application/json" \
-    -u "$CONFLUENT_KAFKA_KEY:$CONFLUENT_KAFKA_SECRET" \
-    -d "$(python3 - "$VERIFY_CLIENT" "$FILL_LOTS" "$FILL_PX" "$RAW_EVENTS_SCHEMA_ID" <<'PY'
-import base64, json, struct, sys, datetime
-acct, lots, px, sid = sys.argv[1], int(sys.argv[2]), float(sys.argv[3]), int(sys.argv[4])
-ts = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d %H:%M:%S.%f')[:23]
-payload = json.dumps({"acct": acct, "sym": "ESU6", "qty": lots, "px": px, "ts": ts, "kind": "verify"}).encode()
-framed = b"\x00" + struct.pack(">I", sid) + payload
-print(json.dumps({"key": {"type": "STRING", "data": acct},
-                  "value": {"type": "BINARY", "data": base64.b64encode(framed).decode()}}))
-PY
-)"
+  produce_verify "$FILL_LOTS" || fail "could not produce the verification fill"
   printf '  produced %s lots, waiting for the commit\n' "$FILL_LOTS"
 
   OK=0
@@ -181,6 +189,12 @@ PY
     printf '  [%ss] %s\n' "$((i*15))" "${NOW:-no row}"
   done
   [ "$OK" = "1" ] || fail "did not converge to $EXPECTED within 300s"
+
+  # Taken back, because the stack now stays up: left in, every run added $5.4m to 90000, and
+  # after about six it would be over 85% and escalating. Not waited for; it lands at the next
+  # commit like any record.
+  if produce_verify "-$FILL_LOTS"; then printf '  took the %s lots back\n' "$FILL_LOTS"
+  else fail "could not take the verification fill back: 90000 is $FILL_LOTS lots high"; fi
 fi
 
 section "Result"

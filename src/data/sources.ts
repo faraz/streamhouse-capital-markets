@@ -20,28 +20,28 @@ export const SOURCES: ReadonlyArray<SourceDef> = [
   {
     name: 'Intraday feed',
     shape: 'Messages on MQ',
-    raw: 'MSG|ACCT=4417|SYM=ESU6|QTY=+240|PX=5412.25|TS=14:06:19',
+    raw: 'MSG|ACCT=4417|SYM=ESZ6|QTY=+240|PX=5412.25|TS=14:06:19',
     openingAgeSec: 2,
     becomesLive: false,
   },
   {
     name: 'Venue',
     shape: 'Loose fields, no time',
-    raw: '{"acct":"4417","sym":"ESU6","q":240,"p":5412.25}',
+    raw: '{"acct":"4417","sym":"ESZ6","q":240,"p":5412.25}',
     openingAgeSec: 7560, // reconciles at noon
     becomesLive: false,
   },
   {
     name: 'Desk spreadsheet',
     shape: 'Typed cells',
-    raw: '4417,ESU6,240,5412.25',
+    raw: '4417,ESZ6,240,5412.25',
     openingAgeSec: 11400,
     becomesLive: false,
   },
   {
     name: 'Custodial file',
     shape: 'Fixed-width columns',
-    raw: '4417      ESU6      000240  005412250',
+    raw: '4417      ESZ6      000240  005412250',
     openingAgeSec: 29160, // landed at 06:00
     becomesLive: false,
   },
@@ -55,7 +55,7 @@ export const SOURCES: ReadonlyArray<SourceDef> = [
   {
     name: 'Position file',
     shape: 'Nightly extract / mainframe',
-    raw: '4417|ESU6|240|5412.25|2026-11-08T22:00:00',
+    raw: '4417|ESZ6|240|5412.25|2026-11-08T22:00:00',
     openingAgeSec: 57960, // last night's close
     becomesLive: true,
   },
@@ -64,6 +64,6 @@ export const SOURCES: ReadonlyArray<SourceDef> = [
 /** What the position file becomes once it is read at its source. */
 export const LIVE_BOOK_OF_RECORD = {
   shape: 'Change data capture / mainframe',
-  raw: '4417|ESU6|240|5412.25|INSERT|2026-11-09T14:06:19',
+  raw: '4417|ESZ6|240|5412.25|INSERT|2026-11-09T14:06:19',
   ageSec: 3,
 };

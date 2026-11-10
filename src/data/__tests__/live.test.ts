@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LiveSource, type WireSnapshot } from '../live';
-import { Simulator } from '../simulator';
+import { DEFAULT_FILL_LOTS, OPENING_MS, Simulator } from '../simulator';
+import { FILL_PX } from '../fill';
 import { FOLLOWED } from '../book';
 import { runContract } from './contract';
 
@@ -69,7 +70,9 @@ function harness(opts: { viaGlobalFetch?: boolean } = {}) {
     if (url.includes('/api/fill')) {
       const body = JSON.parse(String(init?.body ?? '{}'));
       await server.produceFill(body.clientId, body.lots);
-      return new Response('{}', { status: 200 });
+      // As the Worker answers: the event it produced, stamped on the server's clock.
+      const ts = new Date(OPENING_MS + now).toISOString().replace('T', ' ').replace('Z', '');
+      return new Response(JSON.stringify({ produced: { acct: body.clientId, qty: body.lots, ts } }), { status: 200 });
     }
     if (url.includes('/api/reset')) {
       await server.reset();
@@ -139,5 +142,27 @@ describe('live source: the default fetch, as the browser runs it', () => {
     const { source } = harness({ viaGlobalFetch: true });
     await source.setMode('streamhouse');
     expect((await source.snapshot(FOLLOWED)).origin).toBe('confluent');
+  });
+});
+
+describe('live source: a fill in flight is tracked from the live stack, not the simulator', () => {
+  // The live book has clients the simulator has never heard of, and the followed client
+  // changes as people trade. A fill is pending for the client it was sent to, and only that one.
+  it('shows a fill on a client the simulator does not know as pending, priced as the stack prices it', async () => {
+    const { source, advance } = harness();
+    await source.setMode('streamhouse');
+    await source.produceFill('12043', DEFAULT_FILL_LOTS);
+    advance(1_000);
+    const s = await source.snapshot('12043');
+    expect(s.pendingFill?.lots).toBe(DEFAULT_FILL_LOTS);
+    expect(s.pendingFill?.notionalUsd).toBe(DEFAULT_FILL_LOTS * FILL_PX);
+  });
+
+  it('does not show a fill on 4417 as pending on another client', async () => {
+    const { source, advance } = harness();
+    await source.setMode('streamhouse');
+    await source.produceFill(FOLLOWED, DEFAULT_FILL_LOTS);
+    advance(1_000);
+    expect((await source.snapshot('12043')).pendingFill).toBeNull();
   });
 });

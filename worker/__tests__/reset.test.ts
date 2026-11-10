@@ -13,7 +13,7 @@ describe('reset', () => {
   it('offsets what is left of the presenter fills, net of earlier resets', () => {
     // Two rehearsals on 4417: 4,000 lots then reset, then 1,200 lots.
     const out = resetEvents([fill('4417', 4000), fill('4417', -4000), fill('4417', 1200)], TS);
-    expect(out).toEqual([{ acct: '4417', sym: 'ESU6', qty: -1200, px: 5414, ts: TS, kind: 'reset' }]);
+    expect(out).toEqual([{ acct: '4417', sym: 'ESZ6', qty: -1200, px: 5414, ts: TS, kind: 'reset' }]);
   });
 
   it('produces nothing for a client already back where it opened', () => {
