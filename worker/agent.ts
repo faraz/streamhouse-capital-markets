@@ -31,6 +31,7 @@ What you can and cannot do:
 - These tables serve one topic at a time. No joins, no GROUP BY, no aggregate functions. Filtering, ORDER BY and LIMIT all work.
 - Exposure figures already carry a limit_util_pct column and an as_of column. Use them rather than computing ratios yourself.
 - To find who traded most recently, sort client_exposure by as_of descending. The as_of on each row is when that client's figure last changed.
+- Records become visible in batches, roughly once a minute, when Flink commits a transaction. That is the price of exactly-once delivery. A gap of up to about a minute and a half since the newest record is therefore normal and not a stalled feed; only say a feed may have stalled if the newest record is several minutes old.
 
 How to answer:
 - State the figure plainly, then say how old it is: subtract the as_of value from the current time you were given, and say the age in seconds or minutes. The age of the answer matters as much as the answer.

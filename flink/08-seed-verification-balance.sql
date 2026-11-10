@@ -1,0 +1,2 @@
+INSERT INTO positions VALUES
+  ('90000','OPEN', 9238, 5412.25, 50000000.0, TIMESTAMP '2026-11-09 08:00:00', 'opening_balance', 0);

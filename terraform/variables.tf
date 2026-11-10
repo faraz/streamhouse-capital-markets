@@ -63,7 +63,7 @@ variable "enable_streaming_agent" {
 }
 
 variable "flink_max_cfu" {
-  description = "Caps the hourly Flink spend. CFUs bill per minute while statements run."
+  description = "Caps concurrent Flink work. Each running statement holds at least one CFU, and the demo runs eleven continuously plus a burst of seed statements, so 10 left every seed PENDING forever. CFUs bill per minute only while statements run, so the cap itself costs nothing."
   type        = number
-  default     = 10
+  default     = 30
 }

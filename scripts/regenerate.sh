@@ -17,7 +17,7 @@ set -a; . ./.env; set +a
 WITH_GEN=1
 [ "${1:-}" = "--no-gen" ] && WITH_GEN=0
 
-FLAGS_SQL=(--compute-pool "$FLINK_COMPUTE_POOL_ID" --database "$DEMO_CLUSTER_ID" --environment "$DEMO_ENVIRONMENT_ID")
+FLAGS_SQL=(--compute-pool "$DEMO_FLINK_POOL_ID" --database "$DEMO_CLUSTER_ID" --environment "$DEMO_ENVIRONMENT_ID")
 FLAGS_ENV=(--cloud aws --region us-east-1 --environment "$DEMO_ENVIRONMENT_ID")
 STAMP=$(date +%H%M%S)
 
@@ -110,6 +110,8 @@ submit g-evt flink/18-guard-events.sql
 say "the book"
 submit seed-lim flink/04-seed-client-limits.sql
 submit seed-pos flink/05-seed-opening-positions.sql
+submit seed-vlim flink/07-seed-verification-client.sql
+submit seed-vpos flink/08-seed-verification-balance.sql
 # Limits for 8,000 clients, opening balances for 4,000 of them. The rest enter the book
 # the first time the trade feed reaches them, which is how the book grows while the demo
 # runs. Limits must land before balances, or a balance has nothing to join against.
@@ -138,13 +140,16 @@ enable_lt positions "$DESC_POSITIONS"
 enable_lt positions_dlq "$DESC_DLQ"
 
 if [ "$WITH_GEN" = "1" ]; then
-  say "generator"
-  jq --arg k "$CONFLUENT_KAFKA_KEY" --arg s "$CONFLUENT_KAFKA_SECRET" \
-    '.config["kafka.api.key"]=$k | .config["kafka.api.secret"]=$s' \
-    connectors/gen-trades.json > /tmp/gen-regen.json
-  confluent connect cluster create --config-file /tmp/gen-regen.json \
-    --environment "$DEMO_ENVIRONMENT_ID" --cluster "$DEMO_CLUSTER_ID" >/dev/null 2>&1 \
-    && echo "  trade feed created" || echo "  trade feed already there"
+  say "trade feeds"
+  # Two feeds into one topic: established clients trading both ways, new clients opening
+  # positions. Split so the first wander and the second grow the book.
+  for cfg in connectors/*.json; do
+    jq --arg k "$CONFLUENT_KAFKA_KEY" --arg s "$CONFLUENT_KAFKA_SECRET" \
+      '.config["kafka.api.key"]=$k | .config["kafka.api.secret"]=$s' "$cfg" > /tmp/gen-regen.json
+    confluent connect cluster create --config-file /tmp/gen-regen.json \
+      --environment "$DEMO_ENVIRONMENT_ID" --cluster "$DEMO_CLUSTER_ID" >/dev/null 2>&1 \
+      && echo "  created $(jq -r .name "$cfg")" || echo "  $(jq -r .name "$cfg") already there"
+  done
 fi
 
 say "done"

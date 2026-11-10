@@ -580,3 +580,10 @@ input { caret-color: var(--cobalt); }
   font-size: 12px; line-height: 1.45; color: var(--amber);
   max-width: 70ch;
 }
+
+/* A client that entered the book on its first trade: the growth, shown as such. */
+.tick-new {
+  font-family: var(--mono); font-size: 9.5px; font-weight: 700;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--cobalt);
+}

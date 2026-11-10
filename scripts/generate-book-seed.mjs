@@ -21,11 +21,15 @@ const FIRST_ID = 10000;
 const CHUNK = 1000;
 const OPEN_TS = "TIMESTAMP '2026-11-09 08:00:00'";
 const PRICE = 5412.25;
-// Capped below the deck's lowest client (5560 at 67.5%), so the eight the talk names
-// always head the sorted book, and below the escalation threshold, so nothing crosses a
-// line without a narrative event.
+// Well below the deck's lowest client (5560 at 67.5%) and the escalation line at 85%.
+// The first build capped this at 66% with limits from $20m, and a single $2m trade moved
+// a $42m-limit client 4.6 points, straight past 5560. The buffer and the higher minimum
+// limit below together keep the live feed from carrying anyone across a line.
 const UTIL_MIN = 8;
-const UTIL_MAX = 66;
+const UTIL_MAX = 55;
+// From $100m, so one trade from the feed is one or two points of anyone's limit.
+const LIMIT_MIN_M = 100;
+const LIMIT_SPAN_M = 400;
 
 function mulberry32(seed) {
   let a = seed >>> 0;
@@ -39,7 +43,7 @@ function mulberry32(seed) {
 
 const rnd = mulberry32(4417);
 const clients = Array.from({ length: LIMITS }, (_, i) => {
-  const limitUsd = Math.round((20 + rnd() * 480) * 1e6);
+  const limitUsd = Math.round((LIMIT_MIN_M + rnd() * LIMIT_SPAN_M) * 1e6);
   const util = UTIL_MIN + rnd() * (UTIL_MAX - UTIL_MIN);
   return { id: String(FIRST_ID + i), limitUsd, exposureUsd: (limitUsd * util) / 100 };
 });

@@ -8,9 +8,16 @@ import type { Which } from '../useDesk';
 import { PALETTE, age, freshness, money, wallClock } from './format';
 import { FALSE_BLOCK, FOLLOWED } from '../data/book';
 
+/**
+ * A client this far below its limit almost certainly entered the book on its first trade:
+ * it has a limit but no opening balance. Shown as new rather than as a percentage.
+ */
+const NEW_CLIENT_PCT = 5;
+
 interface Props {
   snapshot: DeskSnapshot;
   selected: string;
+  autoFollowing: boolean;
   which: Which;
   mode: Mode;
   isolation: Isolation;
@@ -80,7 +87,8 @@ export function Masthead(p: Props) {
           <span className="lbl">Wall clock</span>
           <span className="wall-time num">{wallClock(now)}</span>
           <span className="lbl">
-            Following {p.selected} / limit {money(s.served.limitUsd)}
+            {p.autoFollowing && live ? 'Auto-following' : 'Following'} {p.selected} / limit{' '}
+            {money(s.served.limitUsd)}
           </span>
         </div>
       </div>
@@ -166,7 +174,11 @@ export function Masthead(p: Props) {
                     <span className="tick-age num" data-tone={freshness(a)}>
                       {age(a)}
                     </span>
-                    <span className="tick-util num">{c.limitUtilPct.toFixed(0)}%</span>
+                    {c.limitUtilPct < NEW_CLIENT_PCT ? (
+                      <span className="tick-new">new</span>
+                    ) : (
+                      <span className="tick-util num">{c.limitUtilPct.toFixed(0)}%</span>
+                    )}
                   </motion.button>
                 );
               })}

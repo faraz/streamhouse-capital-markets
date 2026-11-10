@@ -1,11 +1,12 @@
 {
   "type": "record", "name": "BookOfRecord", "namespace": "demo.raw",
+  "doc": "The book of record's own changes. change_type and changed_at are strings because that is what the normalizing statement reads: it compares change_type to 'DELETE' and parses changed_at with TO_TIMESTAMP.",
   "fields": [
     { "name": "client", "type": "string" },
     { "name": "sym", "type": "string" },
     { "name": "qty", "type": "int" },
     { "name": "px", "type": "double" },
-    { "name": "change_type", "type": { "type": "enum", "name": "ChangeType", "symbols": ["INSERT", "UPDATE", "DELETE"] } },
-    { "name": "changed_at", "type": { "type": "long", "logicalType": "timestamp-millis" } }
+    { "name": "change_type", "type": "string" },
+    { "name": "changed_at", "type": "string" }
   ]
 }

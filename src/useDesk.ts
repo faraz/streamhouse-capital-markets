@@ -5,6 +5,10 @@ import { Simulator } from './data/simulator';
 import { FOLLOWED } from './data/book';
 
 const POLL_MS = 2_000;
+/** Below this a client's exposure is too small to say anything about on stage. */
+const WORTH_FOLLOWING_PCT = 20;
+/** Past this age an auto-followed client is swapped for someone fresher. */
+const STALE_REFOLLOW_MS = 120_000;
 const GATE = import.meta.env['VITE_DEMO_GATE'] ?? 'local-dev';
 
 export type Which = 'live' | 'simulator';
@@ -30,6 +34,11 @@ export function useDesk() {
   // the freshest client on every poll would move the screen every two seconds under the
   // presenter's hands; following nobody would leave it on a client half an hour stale.
   const pickFreshest = useRef(true);
+  // Until the presenter picks a client, the screen keeps itself current: whenever the
+  // followed client's answer passes STALE_REFOLLOW_MS it moves to whoever traded most
+  // recently. That is what keeps an idle demo from opening on a half-hour-old answer. An
+  // explicit pick stops it, so nothing moves under the presenter's hands mid-demo.
+  const autoFollow = useRef(true);
   const [mode, setModeState] = useState<Mode>('streamhouse');
   const [isolation, setIsolationState] = useState<Isolation>('committed');
   const [snapshot, setSnapshot] = useState<DeskSnapshot | null>(null);
@@ -43,11 +52,13 @@ export function useDesk() {
       const snap = await source.snapshot(client);
       setSnapshot(snap);
       setNote(null);
-      const freshest = snap.active[0];
-      if (pickFreshest.current && snap.mode === 'streamhouse' && snap.origin === 'confluent' && freshest) {
-        pickFreshest.current = false;
+      const freshest = snap.active.find((c) => c.limitUtilPct >= WORTH_FOLLOWING_PCT) ?? snap.active[0];
+      const live = snap.mode === 'streamhouse' && snap.origin === 'confluent';
+      const stale = snap.clocks.servedAgeMs > STALE_REFOLLOW_MS;
+      if (live && freshest && autoFollow.current && (pickFreshest.current || stale)) {
         if (freshest.clientId !== client) setClientState(freshest.clientId);
       }
+      if (live) pickFreshest.current = false;
     } catch (e) {
       // Fall back for this render only, and keep trying. Latching the toggle to the
       // simulator meant one blip while the server was starting left the screen
@@ -88,15 +99,20 @@ export function useDesk() {
     mode,
     isolation,
     setWhich,
+    autoFollowing: autoFollow.current,
     setClient: (c: string) => {
       pickFreshest.current = false;
+      autoFollow.current = false;
       setClientState(c);
     },
     setMode: (m: Mode) => {
       // The before-world is simulated around the two clients the story is told with, so
       // going there returns to them; coming back to the live world picks someone fresh.
       if (m === 'before') setClientState(FOLLOWED);
-      else pickFreshest.current = true;
+      else {
+        pickFreshest.current = true;
+        autoFollow.current = true;
+      }
       setModeState(m);
     },
     setIsolation: (i: Isolation) => setIsolationState(i),

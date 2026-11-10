@@ -1348,10 +1348,10 @@ var init_node_browser2 = __esm({
   }
 });
 
-// .wrangler/tmp/bundle-3DcRFk/middleware-loader.entry.ts
+// .wrangler/tmp/bundle-m94NBx/middleware-loader.entry.ts
 init_modules_watch_stub();
 
-// .wrangler/tmp/bundle-3DcRFk/middleware-insertion-facade.js
+// .wrangler/tmp/bundle-m94NBx/middleware-insertion-facade.js
 init_modules_watch_stub();
 
 // worker/index.ts
@@ -27752,6 +27752,7 @@ What you can and cannot do:
 - These tables serve one topic at a time. No joins, no GROUP BY, no aggregate functions. Filtering, ORDER BY and LIMIT all work.
 - Exposure figures already carry a limit_util_pct column and an as_of column. Use them rather than computing ratios yourself.
 - To find who traded most recently, sort client_exposure by as_of descending. The as_of on each row is when that client's figure last changed.
+- Records become visible in batches, roughly once a minute, when Flink commits a transaction. That is the price of exactly-once delivery. A gap of up to about a minute and a half since the newest record is therefore normal and not a stalled feed; only say a feed may have stalled if the newest record is several minutes old.
 
 How to answer:
 - State the figure plainly, then say how old it is: subtract the as_of value from the current time you were given, and say the age in seconds or minutes. The age of the answer matters as much as the answer.
@@ -27958,7 +27959,7 @@ async function snapshot(env, clientId) {
     runQuery(c, `SELECT source FROM positions ORDER BY event_time DESC LIMIT 60`),
     // Whoever traded most recently. Sorting a Lightning Table on a stored timestamp is the
     // same operation as sorting the book on limit_util_pct.
-    runQuery(c, `SELECT client_id, exposure_usd, limit_usd, limit_util_pct, as_of FROM client_exposure ORDER BY as_of DESC LIMIT 8`)
+    runQuery(c, `SELECT client_id, exposure_usd, limit_usd, limit_util_pct, as_of FROM client_exposure ORDER BY as_of DESC LIMIT 20`)
   ]);
   const servedRow = rowsToObjects(servedQ)[0];
   if (!servedRow)
@@ -28165,7 +28166,7 @@ var jsonError = /* @__PURE__ */ __name(async (request, env, _ctx, middlewareCtx)
 }, "jsonError");
 var middleware_miniflare3_json_error_default = jsonError;
 
-// .wrangler/tmp/bundle-3DcRFk/middleware-insertion-facade.js
+// .wrangler/tmp/bundle-m94NBx/middleware-insertion-facade.js
 var __INTERNAL_WRANGLER_MIDDLEWARE__ = [
   middleware_ensure_req_body_drained_default,
   middleware_miniflare3_json_error_default
@@ -28198,7 +28199,7 @@ function __facade_invoke__(request, env, ctx, dispatch, finalMiddleware) {
 }
 __name(__facade_invoke__, "__facade_invoke__");
 
-// .wrangler/tmp/bundle-3DcRFk/middleware-loader.entry.ts
+// .wrangler/tmp/bundle-m94NBx/middleware-loader.entry.ts
 var __Facade_ScheduledController__ = class {
   constructor(scheduledTime, cron, noRetry) {
     this.scheduledTime = scheduledTime;

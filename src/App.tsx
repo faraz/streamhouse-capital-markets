@@ -26,6 +26,7 @@ export default function App() {
       <Masthead
         snapshot={s}
         selected={desk.client}
+        autoFollowing={desk.autoFollowing}
         which={desk.which}
         mode={desk.mode}
         isolation={desk.isolation}

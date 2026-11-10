@@ -72,7 +72,7 @@ async function snapshot(env: Env, clientId: string): Promise<Response> {
     runQuery(c, `SELECT source FROM positions ORDER BY event_time DESC LIMIT 60`),
     // Whoever traded most recently. Sorting a Lightning Table on a stored timestamp is the
     // same operation as sorting the book on limit_util_pct.
-    runQuery(c, `SELECT client_id, exposure_usd, limit_usd, limit_util_pct, as_of FROM client_exposure ORDER BY as_of DESC LIMIT 8`),
+    runQuery(c, `SELECT client_id, exposure_usd, limit_usd, limit_util_pct, as_of FROM client_exposure ORDER BY as_of DESC LIMIT 20`),
   ]);
 
   const servedRow = rowsToObjects(servedQ)[0];

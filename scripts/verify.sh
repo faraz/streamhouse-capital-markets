@@ -30,20 +30,19 @@ query() {
 }
 rows() { query "$1" | jq -r '.result.data[]? | @tsv'; }
 
-VERIFY_CLIENT="28857"
+VERIFY_CLIENT="90000"
 FILL_LOTS=1000
 FILL_PX=5414.0
 
 section "Flink statements"
 STMTS=$(confluent flink statement list --cloud aws --region us-east-1 \
   --environment "$DEMO_ENVIRONMENT_ID" -o json 2>/dev/null)
-for s in cm-agg-1 cm-n-mq-1 cm-norm-mq-1 cm-n-ven cm-n-dsk cm-n-cus cm-n-clr cm-n-bor cm-n-evt cm-grd-1 cm-g-evt; do
-  st=$(printf '%s' "$STMTS" | jq -r --arg n "$s" '.[] | select(.name==$n) | .status' 2>/dev/null)
-  [ -z "$st" ] && continue
-  if [ "$st" = "RUNNING" ]; then pass "$s is RUNNING"; else fail "$s is $st"; fi
+# Names carry a timestamp per rebuild, so each role is checked by its prefix.
+for role in agg n-mq n-ven n-dsk n-cus n-clr n-bor n-evt n-trd g-mq g-evt; do
+  st=$(printf '%s' "$STMTS" | jq -r --arg r "cm-$role-" \
+       '[.[] | select(.name | startswith($r))] | sort_by(.name) | last | .status // empty')
+  if [ "$st" = "RUNNING" ]; then pass "$role is RUNNING"; else fail "$role is ${st:-missing}"; fi
 done
-RUNNING=$(printf '%s' "$STMTS" | jq -r '[.[] | select(.status=="RUNNING")] | length')
-if [ "${RUNNING:-0}" -ge 8 ]; then pass "$RUNNING statements running"; else fail "only ${RUNNING:-0} statements running, expected at least 8"; fi
 
 section "Lightning Tables"
 LT=$(confluent rtce rtce-topic list --environment "$DEMO_ENVIRONMENT_ID" \
@@ -78,6 +77,17 @@ fi
 OVER=$(printf '%s' "$BOOK" | awk -F'\t' '$2 > 100 {print $1}' | tr '\n' ' ')
 if [ -z "$OVER" ]; then pass "no client is over its limit"; else fail "over limit: $OVER"; fi
 
+section "Someone has always just traded"
+FRESH=$(rows "SELECT client_id, as_of FROM client_exposure ORDER BY as_of DESC LIMIT 1")
+FRESH_ID=$(printf '%s' "$FRESH" | cut -f1)
+FRESH_AT=$(printf '%s' "$FRESH" | cut -f2)
+if [ -n "$FRESH_AT" ]; then
+  AGE=$(python3 -c "import datetime as d; t=d.datetime.fromisoformat('$FRESH_AT'.replace(' ','T')).replace(tzinfo=d.timezone.utc); print(int((d.datetime.now(d.timezone.utc)-t).total_seconds()))")
+  if [ "$AGE" -le 180 ]; then pass "freshest client $FRESH_ID traded ${AGE}s ago"; else fail "freshest client is ${AGE}s old: is the trade feed running?"; fi
+else
+  fail "could not read the freshest client"
+fi
+
 section "Generator"
 CONN=$(confluent connect cluster list --environment "$DEMO_ENVIRONMENT_ID" \
   --cluster "$DEMO_CLUSTER_ID" -o json 2>/dev/null)
@@ -99,7 +109,7 @@ else
 fi
 
 if [ "$QUICK" = "1" ]; then
-  head "Result"
+  section "Result"
   [ "$FAILED" = "0" ] && { printf '  checks passed (quick: no convergence test)\n'; exit 0; }
   printf '  something failed\n'; exit 1
 fi
