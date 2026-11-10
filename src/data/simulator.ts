@@ -249,7 +249,7 @@ export class Simulator implements ExposureSource {
       ? {
           raw: 'MSG|ACCT=4417|SYM=ESU6|QTY=+2400000|PX=5412.25',
           reason: 'Quantity exceeds the desk bound of 50,000 lots',
-          topic: 'positions.dlq',
+          topic: 'positions_dlq',
         }
       : null;
 

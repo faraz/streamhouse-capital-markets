@@ -22,3 +22,6 @@ dist/
 
 # macOS
 .DS_Store
+
+# Local Worker secrets
+.dev.vars
