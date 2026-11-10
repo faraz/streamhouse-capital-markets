@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Exposure Desk</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="/src/styles.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="mast">
+    <div class="mast-top">
+      <h1>One governed record, and an agent that can <em>ask anything</em></h1>
+      <div class="wall">
+        <span class="lbl">Trading day / wall clock</span>
+        <span class="wall-time" id="wall">--:--:--</span>
+        <span class="lbl" id="client-line">Client 4417</span>
+      </div>
+    </div>
+    <div class="controls">
+      <div class="seg" role="group" aria-label="Architecture">
+        <button type="button" id="m-before" aria-pressed="false">Before</button>
+        <button type="button" id="m-stream" aria-pressed="true">Streamhouse</button>
+      </div>
+      <div class="seg" role="group" aria-label="Data source">
+        <button type="button" id="s-live" aria-pressed="true">Live</button>
+        <button type="button" id="s-sim" aria-pressed="false">Simulator</button>
+      </div>
+      <div class="seg" role="group" aria-label="Client">
+        <button type="button" class="c-btn" data-client="4417" aria-pressed="true">4417</button>
+        <button type="button" class="c-btn" data-client="7405" aria-pressed="false">7405</button>
+      </div>
+      <button type="button" class="ghost" id="fill">A fill arrives</button>
+      <button type="button" class="ghost" id="fat">Send a fat finger</button>
+      <button type="button" class="ghost" id="reset">Reset</button>
+      <span class="origin" id="origin" data-origin="simulator"><i></i><span id="origin-text">starting</span></span>
+    </div>
+  </header>
+
+  <section class="panel">
+    <div class="panel-head">
+      <span class="panel-title">Connect and Govern / six systems, six shapes, one record</span>
+      <span class="lbl" id="norm-count"></span>
+    </div>
+    <div class="norm">
+      <div class="shapes" id="shapes"></div>
+      <div class="chev" aria-hidden="true">
+        <svg width="34" height="18" viewBox="0 0 34 18" fill="none"><path d="M1 9h27" stroke="currentColor" stroke-width="1.4"/><path d="M26 3l6 6-6 6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="lbl">Connect</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px;min-width:0">
+        <div class="record" id="record"></div>
+        <div class="gov" id="gov"></div>
+      </div>
+    </div>
+    <p class="panel-note" id="norm-note"></p>
+  </section>
+
+  <div class="main">
+    <section class="panel agent">
+      <div class="panel-head">
+        <span class="panel-title">The risk agent / asking over MCP through the Real-Time Context Engine</span>
+        <span class="lbl" id="agent-conn"></span>
+      </div>
+      <div class="asks" id="asks"></div>
+      <div class="askbox">
+        <input id="ask-input" type="text" placeholder="Ask anything about the book, in English" autocomplete="off">
+        <button type="button" id="ask-go">Ask</button>
+      </div>
+      <div class="tape" id="tape"></div>
+      <p class="panel-note" id="agent-note"></p>
+    </section>
+
+    <div class="rail-col">
+      <section class="panel">
+        <div class="panel-head">
+          <span class="panel-title">Escalations</span>
+          <span class="lbl">Watching every client</span>
+        </div>
+        <div class="esc" id="esc"></div>
+        <p class="panel-note">The agent never touches an order. It gets a person there in time.</p>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <span class="panel-title">How old the answer is</span>
+          <span class="lbl">Three clocks</span>
+        </div>
+        <div class="clocks" id="clocks"></div>
+        <div class="meter" id="limit-meter"></div>
+        <p class="panel-note" id="iso-note"></p>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <span class="panel-title">The book</span>
+          <span class="lbl" id="book-count"></span>
+        </div>
+        <div class="book" id="book"></div>
+      </section>
+    </div>
+  </div>
+
+  <footer class="foot">
+    <span class="lbl">Capital markets / exposure across desks, venues, custodians and entities</span>
+    <span class="lbl" id="foot-note">Figures are synthetic. No client, venue or custodian is named.</span>
+  </footer>
+</div>
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>
