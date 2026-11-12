@@ -29,8 +29,8 @@ uniform vec3 uDim;
 uniform vec3 uText;
 uniform float uReject;
 uniform float uFill;
-uniform float uPulseLane;
-uniform float uPulse;
+uniform vec3 uLane[${MAX_LANES}];
+uniform float uBead[${MAX_LANES}];
 out vec4 o;
 
 const float NODE = 0.5;
@@ -73,8 +73,11 @@ void main() {
       // A nightly feed is a dashed line: it arrives in pieces.
       float dash = mix(step(0.45, fract(uv.x * 22.0 - uTime * 0.05 - float(i) * 0.3)), 1.0, c);
       // A producing lane is drawn brighter than a quiet one; nothing glows around it.
-      float ln = smoothstep(1.3, 0.0, d) * mix(0.22, 0.62, flowing) * dash;
-      col += mix(uDim, tint, mix(0.55, 0.8, flowing)) * ln;
+      float ln = smoothstep(1.3, 0.0, d) * mix(mix(0.22, 0.36, c), 0.62, flowing) * dash;
+      // A quiet lane is drawn in its source's own colour, faintly; a producing one in the
+      // colour of a live feed.
+      vec3 own = mix(mix(uDim, uLane[i], 0.85 * c), mix(uDim, tint, 0.8), flowing);
+      col += own * ln;
       a += ln;
     }
 
@@ -92,14 +95,17 @@ void main() {
       }
     }
 
-    // One record, followed on request: a bead along its own lane into Flink.
-    if (uPulse < 1.2 && abs(uPulseLane - float(i)) < 0.5) {
-      float x = clamp(uPulse / 0.7, 0.0, 1.0) * NODE;
+    // One record of this source, replayed or followed on request: a bead in the source's
+    // colour along its own lane into Flink, which answers in that colour as it arrives.
+    float bead = uBead[i];
+    if (bead < 1.9) {
+      float x = clamp(bead / 1.0, 0.0, 1.0) * NODE;
       vec2 p = vec2(x, yAt(i, x, c));
-      float fade = smoothstep(1.2, 0.7, uPulse);
-      float g = (glow(frag, p, 3.4) + glow(frag, p, 14.0) * 0.4) * fade;
-      col += uText * g;
-      a += g;
+      float fade = smoothstep(0.0, 0.12, bead) * smoothstep(1.9, 1.15, bead);
+      float g = (glow(frag, p, 3.6) + glow(frag, p, 15.0) * 0.4) * fade;
+      float arrive = exp(-pow((bead - 1.0) * 4.0, 2.0)) * glow(frag, vec2(NODE, 0.5), 20.0) * 0.7;
+      col += uLane[i] * (g + arrive);
+      a += g + arrive;
     }
   }
 
@@ -186,11 +192,13 @@ interface Props {
   rejectAt: number | null;
   /** When the last fill landed, in ms since the epoch, or null. */
   fillAt: number | null;
-  /** A source the presenter picked to follow: its row in the list, and when. */
-  pulse: { lane: number; at: number } | null;
+  /** Each lane's own colour, in the order of `lanes`. */
+  colors: string[];
+  /** When a bead last set off down each lane, in ms since the epoch, or null: a replay or a follow. */
+  beads: Array<number | null>;
 }
 
-export function FlowField({ converged, lanes, rejectAt, fillAt, pulse }: Props) {
+export function FlowField({ converged, lanes, rejectAt, fillAt, colors, beads }: Props) {
   const canvas = useRef<HTMLCanvasElement>(null);
   // Eased toward its target in the loop, so the flip between worlds is a transition the
   // room watches happen rather than a cut.
@@ -208,6 +216,8 @@ export function FlowField({ converged, lanes, rejectAt, fillAt, pulse }: Props) 
   const text = rgb(PALETTE.text);
   const tones = new Float32Array(MAX_LANES);
   const flows = new Float32Array(MAX_LANES);
+  const laneColors = new Float32Array(MAX_LANES * 3);
+  const beadAges = new Float32Array(MAX_LANES);
   let last = 0;
 
   const ok = useShader(canvas, FRAG, ({ gl, time, width, height, uniform }) => {
@@ -221,6 +231,9 @@ export function FlowField({ converged, lanes, rejectAt, fillAt, pulse }: Props) 
       const lane = lanes[count - 1 - i]!;
       tones[i] = lane.tone;
       flows[i] = lane.flow ? 1 : 0;
+      laneColors.set(rgb(colors[count - 1 - i] ?? PALETTE.dim), i * 3);
+      const at = beads[count - 1 - i] ?? null;
+      beadAges[i] = at === null || now < at ? 99 : (now - at) / 1000;
     }
     gl.uniform2f(uniform('uRes'), width, height);
     gl.uniform1f(uniform('uTime'), time);
@@ -234,8 +247,8 @@ export function FlowField({ converged, lanes, rejectAt, fillAt, pulse }: Props) 
     gl.uniform3f(uniform('uText'), ...text);
     gl.uniform1f(uniform('uReject'), rejectAt === null ? 99 : (now - rejectAt) / 1000);
     gl.uniform1f(uniform('uFill'), fillAt === null ? 99 : (now - fillAt) / 1000);
-    gl.uniform1f(uniform('uPulseLane'), pulse ? count - 1 - pulse.lane : -1);
-    gl.uniform1f(uniform('uPulse'), pulse ? (now - pulse.at) / 1000 : 99);
+    gl.uniform3fv(uniform('uLane'), laneColors);
+    gl.uniform1fv(uniform('uBead'), beadAges);
   });
 
   return <canvas ref={canvas} className="gl-canvas" aria-hidden="true" data-gl={ok.current ? 'on' : 'off'} />;

@@ -151,6 +151,10 @@ The spotlight is a gesture (2026-11-12): on arriving at a step the panels it is 
 bright edge and the rest dim for 4.5 seconds, then the whole desk comes back up. Escape, or the
 rail's Spotlight button, lifts it early or gives it again.
 
+Each of the six sources has its own colour (`src/ui/sourceColors.ts`), on its row, its lane and
+its tab in the trace (2026-11-12). Only the trade feed is producing, so as a Streamhouse step
+arrives the six quiet lanes each replay their newest record once, in turn, and the stage says so.
+
 Before the room: `scripts/verify.sh --quick`, then press **Reset** and wait for 4417 to read
 81%. Reset also offsets any rehearsal fills; nothing needs rebuilding.
 

@@ -2275,3 +2275,46 @@ kbd {
     0 0 56px -6px rgba(231, 234, 238, 0.27),
     0 18px 40px -22px rgba(0, 0, 0, 0.8);
 }
+
+/* ============ A colour for each source ============ */
+.source-dot { color: var(--faint); box-shadow: inset 0 0 0 1.5px currentColor; width: 7px; height: 7px; border-radius: 50%; }
+.sources[data-live="true"] .source:not([data-flowing="true"]) .source-dot { background: color-mix(in srgb, currentColor 30%, transparent); }
+/* What the lanes are showing, said on the stage itself so stillness is never read as a fault. */
+.flow-note { position: absolute; top: 8px; right: 10px; max-width: 46%; text-align: right; font-size: 11px; line-height: 1.4; color: var(--dim); pointer-events: none; text-wrap: balance; }
+.flow-note[data-replaying="true"] { color: var(--text); }
+.trace-pick-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; margin-right: -2px; }
+@container (max-width: 560px) {
+  .flow-note { display: none; }
+}
+
+/* The Lightning Table, named on the flow itself: under the output line, below the table it serves. */
+.flow-serve {
+  left: auto;
+  right: 0;
+  transform: translate(0, 12px);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 0 0 8px;
+  font-family: var(--ui);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--fresh);
+  border-color: rgba(61, 214, 140, 0.4);
+  background: color-mix(in srgb, var(--fresh) 8%, var(--panel));
+}
+.flow-serve em { font-style: normal; font-weight: 400; color: var(--dim); }
+.flow-serve > .out.glare-hover { margin-block: 0; border-color: transparent; background: none; color: inherit; border-radius: 4px; }
+.flow-serve > .out .out-a { padding: 2px 6px 2px 0; }
+/* Where there is no console to link to, the name still carries its padding. */
+.flow-serve:not(:has(> .out)) { padding: 3px 8px; }
+@container (max-width: 560px) {
+  .flow-serve em { display: none; }
+  .flow-serve { padding-left: 6px; }
+}
+.flow-note { max-width: 40%; }
+@container (max-width: 560px) {
+  /* On a phone the output's name already sits under the line, so the Lightning Table goes under that. */
+  .flow-serve { transform: translate(0, 42px); }
+}
+.flow-note { top: 5px; line-height: 1.3; }

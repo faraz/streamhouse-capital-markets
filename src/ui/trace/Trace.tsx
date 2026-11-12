@@ -9,6 +9,7 @@ import { useNow } from '../useNow';
 import { flinkTime, type TraceModel, type Value } from './build';
 import { lineOf, sqlLines, type Op } from './specs';
 import { Out, useConsole } from '../console';
+import { sourceColor } from '../sourceColors';
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 /** The window the trace was drawn for, and how far past it a bigger screen may magnify it. */
@@ -151,9 +152,11 @@ const PICK_STEP_MS = 110;
  * only under the pointer or the keyboard's focus.
  */
 function ShapePick({
-  label, selected, index, introduce, onPick,
+  label, color, selected, index, introduce, onPick,
 }: {
   label: string;
+  /** The source's own colour, the one its lane carries on the desk. */
+  color: string;
   selected: boolean;
   index: number;
   introduce: boolean;
@@ -192,6 +195,7 @@ function ShapePick({
       hover={lapping ? 'none' : 'reveal'}
       theme="dark"
     >
+      <i className="trace-pick-dot" style={{ background: color }} aria-hidden="true" />
       <span className="trace-pick-label">{label}</span>
     </StarBorder>
   );
@@ -425,6 +429,7 @@ export function Trace({
             <ShapePick
               key={m.id}
               label={m.label}
+              color={sourceColor(m.id.split('-')[1] ?? '')}
               selected={m.id === model.id}
               index={i}
               introduce={introduce}

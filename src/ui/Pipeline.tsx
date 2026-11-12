@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import type { DeskSnapshot } from '../data/types';
 import { age, baseTime, freshness, tableAsOf } from './format';
@@ -6,6 +6,7 @@ import { AgeRuler } from './AgeRuler';
 import { Extracts } from './Extracts';
 import { FlowField, type Lane } from './gl/FlowField';
 import { PILLARS } from './pillars';
+import { sourceColor } from './sourceColors';
 import { Panel, type Tour } from './Tour';
 import { useNow } from './useNow';
 import { Out, useConsole } from './console';
@@ -13,7 +14,11 @@ import { Out, useConsole } from './console';
 const EASE = [0.16, 1, 0.3, 1] as const;
 const LANE_TONE = { fresh: 0, warn: 0.5, stale: 1 } as const;
 /** How long the bead runs along a lane before its record's trace opens. */
-const FOLLOW_MS = 700;
+const FOLLOW_MS = 1000;
+/** The replay: when the first quiet source's record sets off, the gap to the next, and how long one takes. */
+const REPLAY_FIRST_MS = 900;
+const REPLAY_GAP_MS = 480;
+const REPLAY_RUN_MS = 1900;
 
 interface Row {
   id: string;
@@ -57,7 +62,10 @@ export function Pipeline({
     : null;
   const s = snapshot;
   const live = s.mode === 'streamhouse';
-  const [pulse, setPulse] = useState<{ lane: number; at: number } | null>(null);
+  // When a bead last set off down each lane, by source: a replay as the step arrives, or the
+  // presenter following one source's record.
+  const [beads, setBeads] = useState<Record<string, number>>({});
+  const [replaying, setReplaying] = useState(false);
 
   const shaped: Row[] = s.sources.map((x) => {
     const record = s.shapes.find((p) => p.source === x.id);
@@ -109,9 +117,25 @@ export function Pipeline({
     flow: r.flowing,
   }));
 
-  const follow = (row: Row, lane: number) => {
+  // Only the trade feed is producing, so the other six lanes are still. As the streamhouse
+  // comes into view each of them replays its newest record once, one after another, in its
+  // own colour: six shapes arriving and meeting at Flink. Then they rest, and the screen says
+  // which it was showing.
+  const quiet = live ? rows.filter((r) => !r.flowing && r.traceable).map((r) => r.id).join(',') : '';
+  const onStage = live && tour.beat.lit.includes('pipeline');
+  useEffect(() => {
+    if (!onStage || !quiet) return;
+    const ids = quiet.split(',');
+    const t0 = Date.now() + REPLAY_FIRST_MS;
+    setBeads(Object.fromEntries(ids.map((id, k) => [id, t0 + k * REPLAY_GAP_MS])));
+    setReplaying(true);
+    const done = window.setTimeout(() => setReplaying(false), REPLAY_FIRST_MS + ids.length * REPLAY_GAP_MS + REPLAY_RUN_MS);
+    return () => window.clearTimeout(done);
+  }, [onStage, quiet, tour.index]);
+
+  const follow = (row: Row) => {
     if (!row.traceable || !onTraceSource) return;
-    setPulse({ lane, at: Date.now() });
+    setBeads((b) => ({ ...b, [row.id]: Date.now() }));
     window.setTimeout(() => onTraceSource(row.id), FOLLOW_MS);
   };
 
@@ -164,7 +188,7 @@ export function Pipeline({
                 data-stalest={r.stalest}
                 data-flowing={live ? r.flowing : undefined}
                 disabled={!r.traceable}
-                onClick={() => follow(r, i)}
+                onClick={() => follow(r)}
                 title={
                   r.traceable
                     ? `Follow the ${r.name.toLowerCase()} record through Kafka and Flink`
@@ -174,7 +198,7 @@ export function Pipeline({
                 }
               >
                 <span className="source-name">
-                  {live ? <i className="source-dot" aria-hidden="true" /> : null}
+                  {live ? <i className="source-dot" aria-hidden="true" style={r.flowing ? undefined : { color: sourceColor(r.id) }} /> : null}
                   <span className="source-label">{r.name}</span>
                 </span>
                 <span className="source-shape">{r.shape}</span>
@@ -189,12 +213,29 @@ export function Pipeline({
 
         {live ? (
           <div className="flow-stage">
-            <FlowField converged lanes={lanes} rejectAt={rejectAt} fillAt={fillAt} pulse={pulse} />
+            <FlowField
+              converged
+              lanes={lanes}
+              rejectAt={rejectAt}
+              fillAt={fillAt}
+              colors={rows.map((r) => sourceColor(r.id))}
+              beads={rows.map((r) => beads[r.id] ?? null)}
+            />
+            <span className="flow-note" data-replaying={replaying}>
+              {replaying ? "Replaying each source's newest record" : quiet ? 'Only the trade feed is producing now' : null}
+            </span>
             <span className="flow-tag flow-node" data-live>
               <Out href={c?.statements} title="The running statements, in Flink management">Flink SQL</Out>
             </span>
             <span className="flow-tag flow-out" data-live>
               <Out href={c?.materialized('client_exposure')} title="The materialized table, in the console">client_exposure</Out>
+            </span>
+            {/* Where the governed total is asked: named on the picture, under the table it serves. */}
+            <span className="flow-tag flow-serve">
+              <em>served as a</em>
+              <Out href={c?.lightningTable('client_exposure')} title="This Lightning Table, in the console">
+                Lightning Table
+              </Out>
             </span>
             <span className="flow-tag flow-dlq" data-hit={!!s.rejected}>
               <Out href={c?.topic('positions_dlq')} title="The dead letter topic's records, in the console">
