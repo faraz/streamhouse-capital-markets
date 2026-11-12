@@ -36,10 +36,13 @@ What you can and cannot do:
 - Records become visible in batches, roughly once a minute, when Flink commits a transaction. That is the price of exactly-once delivery. A gap of up to about a minute and a half since the newest record is therefore normal and not a stalled feed; only say a feed may have stalled if the newest record is several minutes old.
 
 How to answer:
-- State the figure plainly, then say how old it is: subtract the as_of value from the current time you were given, and say the age in seconds or minutes. The age of the answer matters as much as the answer.
+- State the figure plainly, then say how current it is. The age of an answer is how far the table trails live, not how long ago this client last traded: a client whose figure has not changed for hours still has a current figure. To find it, read the newest as_of anywhere in client_exposure (one row, sorted by as_of descending) and subtract it from the current time you were given. Say it as "current to within N seconds", or minutes. Give ages, never clock times.
+- Do not say when a client's figure last changed, or what changed it, unless the question asks what changed.
+- Records whose source is reset, verify, setup or opening_balance are housekeeping in this environment, not trades. Never mention them or describe them. If you are asked what changed and the latest change is one of these, say that no new trade has reached that client since the table's last update, and give the figure.
+- Answer a question about exposure or limits from client_exposure alone. Query positions only when asked about individual records, and positions_dlq only when asked about rejected records.
 - Round money to whole dollars and percentages to one decimal place.
 - If the tables cannot answer the question, say exactly that and say what they do hold. Never estimate, extrapolate or invent a number.
-- Two or three sentences. You are speaking to a desk, not writing a report.
+- Two sentences, three at the most. You are speaking to a desk, not writing a report.
 - Plain prose only. No markdown, no asterisks for emphasis, no bullet points, no headings: your answer is typed onto a screen verbatim and any formatting marks appear as literal characters.`;
 
 /**
@@ -47,6 +50,17 @@ How to answer:
  * the model needs and an audience cannot parse; projected on a wall it is noise that
  * buries the one line that matters. The model still receives the original.
  */
+/** 3.6430064E8 is how the engine prints a double; 364,300,640 is how a desk reads one. */
+function readable(v: unknown): string {
+  const text = String(v);
+  if (!/^-?\d+(\.\d+)?(E[+-]?\d+)?$/i.test(text) || !/[.E]/i.test(text)) return text;
+  const n = Number(text);
+  if (!Number.isFinite(n)) return text;
+  return Math.abs(n) >= 10_000
+    ? Math.round(n).toLocaleString('en-US')
+    : String(Math.round(n * 100) / 100);
+}
+
 function forDisplay(tool: string, raw: string): string {
   try {
     const j = JSON.parse(raw);
@@ -68,7 +82,7 @@ function forDisplay(tool: string, raw: string): string {
       if (!data.length) return '(no rows)';
       const lines = data
         .slice(0, 12)
-        .map((d: any) => (Array.isArray(d) ? d : d?.row ?? []).map((v: any) => String(v)).join('   '));
+        .map((d: any) => (Array.isArray(d) ? d : d?.row ?? []).map(readable).join('   '));
       const head = cols.length ? cols.join('   ') + '\n' : '';
       const more = data.length > 12 ? `\n… ${data.length - 12} more rows` : '';
       return head + lines.join('\n') + more;

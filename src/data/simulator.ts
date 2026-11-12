@@ -1,10 +1,13 @@
 import type {
   Clock, ClientExposure, DeskSnapshot, Escalation, ExposureSource,
-  Isolation, Mode, NormalizedRecord, Position, RejectedRecord, SourceAge,
+  Isolation, Mode, NormalizedRecord, Position, RawEvent, RejectedRecord, SourceAge,
 } from './types';
 import { buildBook, DECK_CLIENTS, FOLLOWED, STALE_REPORTED } from './book';
 import { LIVE_BOOK_OF_RECORD, SOURCES } from './sources';
-import { FILL_LOTS, FILL_PX } from './fill';
+import { FILL_LOTS, FILL_PX, FILL_SYMBOL } from './fill';
+
+/** The timestamp string the Worker stamps on a produced event: Flink's format, UTC. */
+const flinkTs = (d = new Date()) => d.toISOString().replace('T', ' ').replace('Z', '').slice(0, 23);
 
 /** Flink commits transactions about once a minute. That, not the table, is the minute. */
 export const COMMIT_MS = 60_000;
@@ -82,12 +85,14 @@ export class Simulator implements ExposureSource {
     this.isolation = level;
   }
 
-  async produceFill(clientId: string, lots = DEFAULT_FILL_LOTS): Promise<void> {
+  async produceFill(clientId: string, lots = DEFAULT_FILL_LOTS): Promise<RawEvent | null> {
     this.events.push({ kind: 'fill', atMs: this.clock(), clientId, lots });
+    return { acct: clientId, sym: FILL_SYMBOL, qty: lots, px: FILL_PX, ts: flinkTs(), kind: 'fill' };
   }
 
-  async produceFatFinger(clientId: string): Promise<void> {
+  async produceFatFinger(clientId: string): Promise<RawEvent | null> {
     this.events.push({ kind: 'fatfinger', atMs: this.clock(), clientId });
+    return { acct: clientId, sym: 'ESZ6', qty: 2_400_000, px: 5412.25, ts: flinkTs(), kind: 'fat_finger' };
   }
 
   async reset(): Promise<void> {
@@ -151,6 +156,7 @@ export class Simulator implements ExposureSource {
           ? LIVE_BOOK_OF_RECORD.ageSec * 1000
           : s.openingAgeSec * 1000 + t;
       return {
+        id: s.id,
         name: s.name,
         shape: isBookOfRecord && live ? LIVE_BOOK_OF_RECORD.shape : s.shape,
         raw: isBookOfRecord && live ? LIVE_BOOK_OF_RECORD.raw : s.raw,
@@ -174,7 +180,9 @@ export class Simulator implements ExposureSource {
       return [{
         at: 0,
         title: 'Found out the next morning / 08:14',
-        what: `Client ${clientId} closed yesterday at 103% of limit. The risk agent saw 68% all afternoon and escalated nothing.`,
+        // The breach is the followed client's story, whoever the screen is on: said of anyone
+        // else, neither figure in it would be theirs.
+        what: `Client ${FOLLOWED} closed yesterday at 103% of limit. The risk agent saw 68% all afternoon and escalated nothing.`,
         tone: 'bad',
         author: 'simulator',
       }];
@@ -255,7 +263,7 @@ export class Simulator implements ExposureSource {
     );
     const rejected: RejectedRecord | null = fatFinger
       ? {
-          raw: 'MSG|ACCT=4417|SYM=ESZ6|QTY=+2400000|PX=5412.25',
+          raw: JSON.stringify({ client_id: clientId, symbol: 'ESZ6', quantity: 2_400_000, price: 5412.25, source: 'fat_finger' }),
           reason: 'Quantity exceeds the desk bound of 50,000 lots',
           topic: 'positions_dlq',
         }
@@ -285,7 +293,7 @@ export class Simulator implements ExposureSource {
       symbol: 'ESZ6',
       quantity: pending ? pending.lots : 240,
       price: pending ? 5414.0 : 5412.25,
-      eventTime: pending ? pending.atMs : t - 3000,
+      eventTime: OPENING_MS + (pending ? pending.atMs : t - 3000),
       source: normalized.source,
     }];
 
@@ -303,6 +311,22 @@ export class Simulator implements ExposureSource {
       // live feed; this exists so the screen has something to offer when it falls back.
       active: book.slice(8, 14).map((c, i) => ({ ...c, asOf: OPENING_MS + t - (i + 1) * 3000 })),
       recent,
+      tape: recent,
+      // One record of each shape, as the six statements would have written it, so the screen
+      // can show every shape being reshaped with no account behind it.
+      shapes: live
+        ? SOURCES.map((src, i) => ({
+            clientId,
+            symbol: src.id === 'clearing' ? 'CLEARING' : 'ESZ6',
+            quantity: src.id === 'clearing' ? 0 : 240,
+            price: src.id === 'clearing' ? 0 : 5412.25,
+            eventTime: OPENING_MS + t - (i + 1) * 60_000,
+            source: src.id,
+            notionalUsd: src.id === 'clearing' ? 14_120 : 240 * 5412.25,
+            ingestLagMs: (src.becomesLive ? LIVE_BOOK_OF_RECORD.ageSec : src.openingAgeSec) * 1000,
+          }))
+        : [],
+      flowing: live ? ['trade'] : [],
       escalations: this.escalationsFor(clientId, t),
       clocks: {
         servedAgeMs: this.servedAge(t),

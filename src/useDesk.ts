@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { DeskSnapshot, Isolation, Mode } from './data/types';
+import type { DeskSnapshot, ExposureSource, Isolation, Mode } from './data/types';
+import { Simulator } from './data/simulator';
 import { LiveSource } from './data/live';
 import { FOLLOWED } from './data/book';
 import { age } from './ui/format';
@@ -30,7 +31,15 @@ export function useDesk() {
   const started = useRef(Date.now());
   const clock = useCallback(() => Date.now() - started.current, []);
 
-  const source = useMemo(() => new LiveSource({ clock, gate: GATE }), [clock]);
+  // `?source=simulator` previews the screen with no account behind it: a rehearsal of the
+  // narrative events that must not touch the live stack. The origin badge says so.
+  const source = useMemo<ExposureSource>(
+    () =>
+      new URLSearchParams(window.location.search).get('source') === 'simulator'
+        ? new Simulator({ clock })
+        : new LiveSource({ clock, gate: GATE }),
+    [clock],
+  );
   /** When the screen last had a live answer, so a failure can say how stale it is. */
   const lastGood = useRef<number | null>(null);
 
@@ -47,7 +56,21 @@ export function useDesk() {
   const [mode, setModeState] = useState<Mode>('streamhouse');
   const [isolation, setIsolationState] = useState<Isolation>('committed');
   const [snapshot, setSnapshot] = useState<DeskSnapshot | null>(null);
+  // A second client read alongside the followed one, for the step that shows two at once.
+  // Read live at every poll like the first, so neither side of a comparison is a memory.
+  const [besideId, setBesideId] = useState<string | null>(null);
+  const [beside, setBeside] = useState<DeskSnapshot | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  // A narrative event that was not sent. Kept apart from the note above, which every poll
+  // rewrites: a refused fill would otherwise flash for two seconds and be gone, leaving the
+  // presenter waiting on a figure that is never going to move.
+  const [eventError, setEventError] = useState<string | null>(null);
+  const eventErrorTimer = useRef<number | undefined>(undefined);
+  const refused = useCallback((what: string, e: unknown) => {
+    setEventError(`${what} was not sent (${e instanceof Error ? e.message : String(e)}). Nothing changed; press it again.`);
+    window.clearTimeout(eventErrorTimer.current);
+    eventErrorTimer.current = window.setTimeout(() => setEventError(null), 12_000);
+  }, []);
   // A live reset lands at the next commit, not at the click, so the screen says it is on its
   // way for as long as that can take. Otherwise the figures sitting still read as a failure.
   const resetAt = useRef<number | null>(null);
@@ -69,6 +92,15 @@ export function useDesk() {
         if (freshest.clientId !== client) setClientState(freshest.clientId);
       }
       if (live) pickFreshest.current = false;
+      // Its own try: the second read failing must not disturb the desk, which keeps the last
+      // one it had.
+      if (besideId) {
+        try {
+          setBeside(await source.snapshot(besideId));
+        } catch {
+          // The next poll tries again.
+        }
+      }
     } catch (e) {
       // Keep what is on screen and keep trying: the next poll that answers clears this.
       const why = e instanceof Error ? e.message : String(e);
@@ -76,7 +108,11 @@ export function useDesk() {
         ? `The live stack is not answering (${why}).`
         : `The live stack is not answering (${why}). These figures are its last answer, ${age(Date.now() - lastGood.current)} ago.`);
     }
-  }, [source, client]);
+  }, [source, client, besideId]);
+
+  useEffect(() => {
+    if (!besideId) setBeside(null);
+  }, [besideId]);
 
   useEffect(() => {
     void source.setMode(mode);
@@ -96,7 +132,10 @@ export function useDesk() {
 
   return {
     snapshot,
+    beside,
+    readBeside: setBesideId,
     note,
+    eventError,
     client,
     mode,
     isolation,
@@ -127,8 +166,14 @@ export function useDesk() {
       pickFreshest.current = false;
       autoFollow.current = false;
       setClientState(FOLLOWED);
-      await source.produceFill(FOLLOWED, lots);
-      await refresh();
+      try {
+        const event = await source.produceFill(FOLLOWED, lots);
+        await refresh();
+        return event;
+      } catch (e) {
+        refused('The fill', e);
+        return null;
+      }
     },
     // 4417 too: nothing else trades it, so the figure standing still is the guard's doing. On
     // a feed client the trades would move it anyway and the point would be lost.
@@ -136,8 +181,14 @@ export function useDesk() {
       pickFreshest.current = false;
       autoFollow.current = false;
       setClientState(FOLLOWED);
-      await source.produceFatFinger(FOLLOWED);
-      await refresh();
+      try {
+        const event = await source.produceFatFinger(FOLLOWED);
+        await refresh();
+        return event;
+      } catch (e) {
+        refused('The fat finger', e);
+        return null;
+      }
     },
     reset: async () => {
       try {

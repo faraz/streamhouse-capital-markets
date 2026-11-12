@@ -1,6 +1,6 @@
 import type {
-  Clock, ClientExposure, DeskSnapshot, Escalation, EscalationAuthor, ExposureSource,
-  Isolation, Mode, NormalizedRecord, Position, RejectedRecord, SourceAge,
+  Clock, ClientExposure, ConsoleInfo, DeskSnapshot, Escalation, EscalationAuthor, ExposureSource,
+  Isolation, Mode, NormalizedRecord, Position, RawEvent, RejectedRecord, SourceAge,
 } from './types';
 import { COMMIT_MS } from './simulator';
 import { beforeSnapshot } from './before';
@@ -68,18 +68,20 @@ export class LiveSource implements ExposureSource {
     await this.post('/api/reset', {});
   }
 
-  async produceFill(clientId: string, lots: number): Promise<void> {
+  async produceFill(clientId: string, lots: number): Promise<RawEvent | null> {
     // The before-world learns about trades overnight: a fill sent there would move the live
     // book behind the story's back and be found at 7:15.
-    if (this.mode === 'before') return;
-    const { produced } = (await this.post('/api/fill', { clientId, lots })) as { produced?: { ts?: string } };
+    if (this.mode === 'before') return null;
+    const { produced } = (await this.post('/api/fill', { clientId, lots })) as { produced?: RawEvent };
     const eventMs = produced?.ts ? Date.parse(produced.ts.replace(' ', 'T') + 'Z') : NaN;
     if (Number.isFinite(eventMs)) this.inFlight.push({ clientId, lots, eventMs });
+    return produced ?? null;
   }
 
-  async produceFatFinger(clientId: string): Promise<void> {
-    if (this.mode === 'before') return;
-    await this.post('/api/fat-finger', { clientId });
+  async produceFatFinger(clientId: string): Promise<RawEvent | null> {
+    if (this.mode === 'before') return null;
+    const { produced } = (await this.post('/api/fat-finger', { clientId })) as { produced?: RawEvent };
+    return produced ?? null;
   }
 
   async snapshot(clientId: string): Promise<DeskSnapshot> {
@@ -142,6 +144,7 @@ export class LiveSource implements ExposureSource {
     const sources: SourceAge[] = SOURCES.map((s) => {
       const isBookOfRecord = s.becomesLive;
       return {
+        id: s.id,
         name: s.name,
         shape: isBookOfRecord ? LIVE_BOOK_OF_RECORD.shape : s.shape,
         raw: isBookOfRecord ? LIVE_BOOK_OF_RECORD.raw : s.raw,
@@ -183,14 +186,17 @@ export class LiveSource implements ExposureSource {
       ? { raw: wire.rejected.raw, reason: wire.rejected.reason, topic: 'positions_dlq' }
       : null;
 
-    const recent: Position[] = wire.recent.map((p) => ({
+    const position = (p: WirePosition): Position => ({
       clientId: p.clientId,
       symbol: p.symbol,
       quantity: p.quantity,
       price: p.price,
       eventTime: p.eventTimeMs,
       source: p.source,
-    }));
+      notionalUsd: p.notionalUsd,
+      ingestLagMs: p.ingestLagMs,
+    });
+    const recent: Position[] = wire.recent.map(position);
 
     return {
       // Real time: the served rows carry real timestamps, and an age is only right
@@ -223,6 +229,11 @@ export class LiveSource implements ExposureSource {
         lastSource: 'trade',
       })),
       recent,
+      tape: (wire.tape ?? []).map(position),
+      shapes: (wire.shapes ?? []).map(position),
+      flowing: wire.activeSources ?? [],
+      query: wire.timing ? { count: wire.timing.queries, ms: wire.timing.ms } : undefined,
+      console: wire.console,
       escalations,
       clocks: {
         servedAgeMs: wire.servedAgeMs,
@@ -242,13 +253,29 @@ export interface WireEscalation {
   author: EscalationAuthor;
 }
 
+export interface WirePosition {
+  clientId: string;
+  symbol: string;
+  quantity: number;
+  price: number;
+  eventTimeMs: number;
+  source: string;
+  notionalUsd?: number;
+  ingestLagMs?: number;
+}
+
 /** What the server route returns. Flat and already parsed, so the screen does no maths. */
 export interface WireSnapshot {
   served: { exposureUsd: number; limitUsd: number; limitUtilPct: number; asOfMs: number };
   trueExposureUsd: number;
   book: Array<{ clientId: string; exposureUsd: number; limitUsd: number; limitUtilPct: number; asOfMs: number }>;
   active: Array<{ clientId: string; exposureUsd: number; limitUsd: number; limitUtilPct: number; asOfMs: number }>;
-  recent: Array<{ clientId: string; symbol: string; quantity: number; price: number; eventTimeMs: number; source: string }>;
+  recent: WirePosition[];
+  /** Optional: an older Worker does not send these, and the screen degrades to without. */
+  tape?: WirePosition[];
+  shapes?: WirePosition[];
+  timing?: { queries: number; ms: number };
+  console?: ConsoleInfo;
   rejected: { raw: string; reason: string } | null;
   escalations: WireEscalation[];
   activeSources: string[];

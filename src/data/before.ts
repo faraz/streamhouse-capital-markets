@@ -47,6 +47,7 @@ export function beforeSnapshot(
 ): DeskSnapshot {
   const asOf = nowMs - STALEST_MS;
   const sources: SourceAge[] = SOURCES.map((s) => ({
+    id: s.id,
     name: s.name,
     shape: s.shape,
     raw: s.raw,
@@ -93,6 +94,10 @@ export function beforeSnapshot(
     // Nobody has "just traded" in a world that learns about trades overnight.
     active: [],
     recent,
+    // One nightly file is all there is: nothing flows, and nothing was reshaped on the way.
+    tape: recent,
+    shapes: [],
+    flowing: [],
     escalations: [DISCOVERY],
     clocks: { servedAgeMs: STALEST_MS, openTableAgeMs: STALEST_MS },
     pendingFill: null,

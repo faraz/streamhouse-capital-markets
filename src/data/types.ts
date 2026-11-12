@@ -9,6 +9,8 @@ export type Isolation = 'committed' | 'uncommitted';
 export type Clock = () => number;
 
 export interface SourceAge {
+  /** The `source` its Flink statement stamps on every record it reshapes. */
+  id: string;
   /** The system's name as the audience sees it. */
   name: string;
   /** How it arrives, in the audience's words. */
@@ -57,6 +59,10 @@ export interface Position {
   price: number;
   eventTime: number;
   source: string;
+  /** As the record carries it. Not always quantity times price: a clearing total has neither. */
+  notionalUsd?: number;
+  /** How stale its feed was, as its Flink statement stamped it. */
+  ingestLagMs?: number;
 }
 
 /**
@@ -83,6 +89,14 @@ export interface PendingFill {
   visibleAtMs: number | null;
 }
 
+/** What a Confluent Cloud console address is built from. Identifiers, not credentials. */
+export interface ConsoleInfo {
+  environmentId: string;
+  clusterId: string;
+  cloud: string;
+  region: string;
+}
+
 export interface DeskSnapshot {
   /** Wall clock of the simulated trading day, in ms since midnight. */
   wallClock: number;
@@ -104,6 +118,16 @@ export interface DeskSnapshot {
    */
   active: ClientExposure[];
   recent: Position[];
+  /** The newest governed records across the whole book, newest first: what is flowing now. */
+  tape: Position[];
+  /** The newest governed record from each of the six shaped feeds, where one exists. */
+  shapes: Position[];
+  /** The sources behind the newest records. Only these are arriving right now. */
+  flowing: string[];
+  /** Where the live stack lives in the Confluent Cloud console. Absent when nothing is live. */
+  console?: ConsoleInfo;
+  /** How long the served tables took to answer this snapshot. Absent when none were asked. */
+  query?: { count: number; ms: number };
   escalations: Escalation[];
   clocks: { servedAgeMs: number; openTableAgeMs: number };
   pendingFill: PendingFill | null;
@@ -111,10 +135,25 @@ export interface DeskSnapshot {
   origin: 'simulator' | 'confluent';
 }
 
+/**
+ * A presenter event exactly as it was written to the raw_events topic, so the screen can
+ * show the bytes that went into Kafka rather than a description of them.
+ */
+export interface RawEvent {
+  acct: string;
+  sym: string;
+  qty: number;
+  px: number;
+  /** Flink's timestamp string, "YYYY-MM-DD HH:MM:SS.mmm", UTC. */
+  ts: string;
+  kind: 'fill' | 'fat_finger';
+}
+
 export interface ExposureSource {
   snapshot(clientId: string): Promise<DeskSnapshot>;
-  produceFill(clientId: string, lots: number): Promise<void>;
-  produceFatFinger(clientId: string): Promise<void>;
+  /** Null when nothing was written, as in the before-world. */
+  produceFill(clientId: string, lots: number): Promise<RawEvent | null>;
+  produceFatFinger(clientId: string): Promise<RawEvent | null>;
   setIsolation(level: Isolation): Promise<void>;
   setMode(mode: Mode): Promise<void>;
   reset(): Promise<void>;

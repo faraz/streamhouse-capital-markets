@@ -54,6 +54,18 @@ function cfg(env: Env): QueryConfig {
   };
 }
 
+/**
+ * What a console address needs: the environment, the cluster, and where they run. The cloud
+ * and region are read from the SQL endpoint, sql.<region>.<cloud>.confluent.cloud, so there is
+ * nothing new to configure. These are identifiers, not credentials: the console still asks
+ * whoever follows a link to log in.
+ */
+function consoleInfo(env: Env) {
+  const host = /\/\/sql\.([^.]+)\.([^.]+)\.confluent\.cloud/.exec(env.CONFLUENT_SQL_ENDPOINT ?? '');
+  if (!host || !env.DEMO_ENVIRONMENT_ID || !env.DEMO_CLUSTER_ID) return undefined;
+  return { environmentId: env.DEMO_ENVIRONMENT_ID, clusterId: env.DEMO_CLUSTER_ID, region: host[1], cloud: host[2] };
+}
+
 /** Timestamps come back as 'YYYY-MM-DD HH:MM:SS[.sss]', which Date cannot parse as-is. */
 function tsToMs(v: string | undefined): number {
   if (!v) return 0;
@@ -63,19 +75,63 @@ function tsToMs(v: string | undefined): number {
 
 const esc = (s: string) => s.replace(/'/g, "''");
 
+const POSITION_COLUMNS = 'client_id, symbol, quantity, price, notional_usd, event_time, source, ingest_lag_ms';
+
+function toPosition(r: Record<string, string | undefined>) {
+  return {
+    clientId: r['CLIENT_ID'] ?? '',
+    symbol: r['SYMBOL'] ?? '',
+    quantity: Math.round(num(r['QUANTITY'])),
+    price: num(r['PRICE']),
+    notionalUsd: num(r['NOTIONAL_USD']),
+    eventTimeMs: tsToMs(r['EVENT_TIME']),
+    source: r['SOURCE'] ?? '',
+    ingestLagMs: num(r['INGEST_LAG_MS']),
+  };
+}
+
+/** The six differently shaped feeds, by the `source` their Flink statement stamps. */
+const SHAPED = ['mq_intraday', 'venue', 'desk_sheet', 'custodial', 'clearing', 'book_of_record'];
+const SHAPES_FRESH_MS = 60_000;
+let shapesCache: { at: number; rows: ReturnType<typeof toPosition>[] } | null = null;
+
+/**
+ * The newest governed record from each shaped feed, so the screen can show a real record of
+ * every shape being reshaped. These change rarely, and six more queries on every two-second
+ * poll would be waste, so an isolate keeps them for a minute.
+ */
+async function sixShapes(c: QueryConfig): Promise<ReturnType<typeof toPosition>[]> {
+  if (shapesCache && Date.now() - shapesCache.at < SHAPES_FRESH_MS) return shapesCache.rows;
+  const found = await Promise.all(
+    SHAPED.map((source) =>
+      runQuery(c, `SELECT ${POSITION_COLUMNS} FROM positions WHERE source = '${source}' ORDER BY event_time DESC LIMIT 1`)
+        .then((q) => rowsToObjects(q)[0])
+        .catch(() => undefined),
+    ),
+  );
+  const rows = found.filter((r): r is Record<string, string> => !!r).map(toPosition);
+  if (rows.length) shapesCache = { at: Date.now(), rows };
+  return rows;
+}
+
 async function snapshot(env: Env, clientId: string): Promise<Response> {
   const c = cfg(env);
   const id = esc(clientId);
 
-  // Concurrent: the waiting is network, which the CPU budget does not count.
-  const [servedQ, bookQ, recentQ, dlqQ, srcQ, activeQ, notesQ] = await Promise.all([
+  // Started first and awaited last, so a cache miss does not count against the timing below.
+  const shapesP = sixShapes(c).catch(() => []);
+
+  // Concurrent: the waiting is network, which the CPU budget does not count. Timed, because
+  // how quickly the served tables answer is half of what the screen is showing.
+  const startedAt = Date.now();
+  const [servedQ, bookQ, recentQ, dlqQ, tailQ, activeQ, notesQ] = await Promise.all([
     runQuery(c, `SELECT client_id, exposure_usd, limit_usd, limit_util_pct, as_of FROM client_exposure WHERE client_id = '${id}' LIMIT 1`),
     runQuery(c, `SELECT client_id, exposure_usd, limit_usd, limit_util_pct, as_of FROM client_exposure ORDER BY limit_util_pct DESC LIMIT ${BOOK_ROWS}`),
-    runQuery(c, `SELECT client_id, symbol, quantity, price, event_time, source, ingest_lag_ms FROM positions WHERE client_id = '${id}' ORDER BY event_time DESC LIMIT 5`),
-    runQuery(c, `SELECT client_id, quantity, reject_reason, event_time FROM positions_dlq WHERE client_id = '${id}' ORDER BY event_time DESC LIMIT 1`).catch(() => ({ columns: [], rows: [] })),
-    // Which feeds have actually produced anything. No GROUP BY on a Lightning Table, so
-    // this reads the recent tail and collects the distinct sources from it.
-    runQuery(c, `SELECT source FROM positions ORDER BY event_time DESC LIMIT 60`),
+    runQuery(c, `SELECT ${POSITION_COLUMNS} FROM positions WHERE client_id = '${id}' ORDER BY event_time DESC LIMIT 5`),
+    runQuery(c, `SELECT client_id, symbol, quantity, price, source, reject_reason, event_time FROM positions_dlq WHERE client_id = '${id}' ORDER BY event_time DESC LIMIT 1`).catch(() => ({ columns: [], rows: [] })),
+    // The newest records across the whole book: what is flowing now, and from which feeds.
+    // No GROUP BY on a Lightning Table, so the distinct sources are collected from this tail.
+    runQuery(c, `SELECT ${POSITION_COLUMNS} FROM positions ORDER BY event_time DESC LIMIT 60`),
     // Whoever traded most recently. Sorting a Lightning Table on a stored timestamp is the
     // same operation as sorting the book on limit_util_pct.
     runQuery(c, `SELECT client_id, exposure_usd, limit_usd, limit_util_pct, as_of FROM client_exposure ORDER BY as_of DESC LIMIT 20`),
@@ -83,6 +139,7 @@ async function snapshot(env: Env, clientId: string): Promise<Response> {
     // cue to stand in at once rather than wait for a note that is not coming.
     runQuery(c, `SELECT client_id, crossed_at, agent_status, note FROM client_escalations ORDER BY crossed_at DESC LIMIT 5`).catch(() => null),
   ]);
+  const timing = { queries: 7, ms: Date.now() - startedAt };
 
   const servedRow = rowsToObjects(servedQ)[0];
   if (!servedRow) return json({ error: `no exposure row for client ${clientId}` }, 404);
@@ -111,25 +168,26 @@ async function snapshot(env: Env, clientId: string): Promise<Response> {
     asOfMs: tsToMs(r['AS_OF']),
   }));
 
-  const recent = rowsToObjects(recentQ).map((r) => ({
-    clientId: r['CLIENT_ID'] ?? '',
-    symbol: r['SYMBOL'] ?? '',
-    quantity: Math.round(num(r['QUANTITY'])),
-    price: num(r['PRICE']),
-    eventTimeMs: tsToMs(r['EVENT_TIME']),
-    source: r['SOURCE'] ?? '',
-    ingestLagMs: num(r['INGEST_LAG_MS']),
-  }));
+  const recent = rowsToObjects(recentQ).map(toPosition);
+  const tail = rowsToObjects(tailQ).map(toPosition);
 
   const dlqRow = rowsToObjects(dlqQ).find((r) => Date.now() - tsToMs(r['EVENT_TIME']) <= REJECT_SHOWN_MS);
+  // The dead letter row's own columns, as they are: nothing here is a reconstruction of what
+  // the source sent.
   const rejected = dlqRow
     ? {
-        raw: `MSG|ACCT=${dlqRow['CLIENT_ID']}|QTY=${Math.round(num(dlqRow['QUANTITY']))}`,
+        raw: JSON.stringify({
+          client_id: dlqRow['CLIENT_ID'] ?? '',
+          symbol: dlqRow['SYMBOL'] ?? '',
+          quantity: Math.round(num(dlqRow['QUANTITY'])),
+          price: num(dlqRow['PRICE']),
+          source: dlqRow['SOURCE'] ?? '',
+        }),
         reason: dlqRow['REJECT_REASON'] ?? 'rejected by the Flink guard',
       }
     : null;
 
-  const activeSources = [...new Set(rowsToObjects(srcQ).map((r) => r['SOURCE'] ?? ''))].filter(Boolean);
+  const activeSources = [...new Set(tail.map((r) => r.source))].filter(Boolean);
 
   const notes: AgentNote[] | null = notesQ
     ? rowsToObjects(notesQ).map((r) => ({
@@ -164,6 +222,10 @@ async function snapshot(env: Env, clientId: string): Promise<Response> {
     book,
     active,
     recent,
+    tape: tail.slice(0, 10),
+    shapes: await shapesP,
+    timing,
+    console: consoleInfo(env),
     rejected,
     escalations,
     activeSources,

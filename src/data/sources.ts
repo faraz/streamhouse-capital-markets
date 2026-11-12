@@ -7,6 +7,8 @@
  * source rather than waiting for a nightly extract.
  */
 export interface SourceDef {
+  /** The `source` its Flink statement stamps: the name the governed record knows it by. */
+  id: string;
   name: string;
   shape: string;
   raw: string;
@@ -18,6 +20,7 @@ export interface SourceDef {
 
 export const SOURCES: ReadonlyArray<SourceDef> = [
   {
+    id: 'mq_intraday',
     name: 'Intraday feed',
     shape: 'Messages on MQ',
     raw: 'MSG|ACCT=4417|SYM=ESZ6|QTY=+240|PX=5412.25|TS=14:06:19',
@@ -25,6 +28,7 @@ export const SOURCES: ReadonlyArray<SourceDef> = [
     becomesLive: false,
   },
   {
+    id: 'venue',
     name: 'Venue',
     shape: 'Loose fields, no time',
     raw: '{"acct":"4417","sym":"ESZ6","q":240,"p":5412.25}',
@@ -32,6 +36,7 @@ export const SOURCES: ReadonlyArray<SourceDef> = [
     becomesLive: false,
   },
   {
+    id: 'desk_sheet',
     name: 'Desk spreadsheet',
     shape: 'Typed cells',
     raw: '4417,ESZ6,240,5412.25',
@@ -39,6 +44,7 @@ export const SOURCES: ReadonlyArray<SourceDef> = [
     becomesLive: false,
   },
   {
+    id: 'custodial',
     name: 'Custodial file',
     shape: 'Fixed-width columns',
     raw: '4417      ESZ6      000240  005412250',
@@ -46,6 +52,7 @@ export const SOURCES: ReadonlyArray<SourceDef> = [
     becomesLive: false,
   },
   {
+    id: 'clearing',
     name: 'Clearing statement',
     shape: 'Printed total',
     raw: 'TOTAL DUE        364,300,640.00',
@@ -53,6 +60,7 @@ export const SOURCES: ReadonlyArray<SourceDef> = [
     becomesLive: false,
   },
   {
+    id: 'book_of_record',
     name: 'Position file',
     shape: 'Nightly extract / mainframe',
     raw: '4417|ESZ6|240|5412.25|2026-11-08T22:00:00',

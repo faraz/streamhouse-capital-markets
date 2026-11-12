@@ -106,6 +106,51 @@ Measured 2026-11-10 for the 6:15 beat: the figure 11 to 56 s after the click (on
 the risk agent's note about 10 s after the figure. The analyst's answer to "what just
 changed?" takes about 40 s and covers the wait.
 
+The screen now drives these beats itself, as a tour of eleven steps in `src/ui/Tour.tsx`
+(revised 2026-11-11 after `.scratch/exposure-desk/evaluation-2026-11-10.md`): the question,
+today's answer, wrong both ways (the breach and the false block), Streamhouse, six shapes (a real record of each source
+traced through Kafka and Flink), the fat finger, the analyst, the book, the fill (its trace,
+and exactly-once said during the wait), the risk agent (the analyst is asked what changed
+only once the fill has landed), then the desk. The console cutaway is still the presenter's
+own, after the last step.
+
+The desk follows the window (2026-11-11): side columns flex, the middle column scrolls on a
+short window, and under 900px wide everything stacks into one column with the narration
+fixed at the foot. The book's edge, the analyst's edge and the top of the records drag, and
+the sizes are kept in that browser; a double click on a handle puts the design's size back.
+Each step's caption is docked above the rail with its Back and Next.
+
+Names on the live desk open their own page in the Confluent Cloud console (2026-11-11): the
+five pillars, topics, Flink statements, the two materialized tables, Lightning Tables, the
+`risk_agent` Streaming Agent and stream lineage. The addresses are built in
+`src/ui/console.tsx` from the environment and cluster the Worker already holds. Flink
+statement names carry the build's stamp, so after a rebuild set `STATEMENT_STAMP` there to the
+stamp `scripts/regenerate.sh` prints. The links need a browser logged in to Confluent Cloud.
+Each link is a chip with a way-out arrow, wrapped in React Bits' GlareHover: a glare crosses it
+once when it first shows and again under the pointer or keyboard focus, and it is still at rest.
+
+The desk is flat graphite: colour appears only on data, never as atmosphere (2026-11-11). Its
+graphics carry the argument. The client panel's limit instrument is the figure over the session,
+stepped, with a tick for each Flink commit; in Today mode the nightly copy and what was true run
+apart. Under the flow, one log-scale ruler places every source and the answer by age. The book
+opens with a limit ladder, one square per client. In a trace, field names ride the wires. When a
+fill lands and the desk is in view, its four stops are numbered in order for sixteen seconds.
+
+Step 3 is named Wrong both ways on the rail (2026-11-12): the false block is told against the breach, the client panel splits in two,
+4417 beside 7405 on one scale, the copy's mark staying put and the true figure leaving it in
+opposite directions. Both clients are read live while the step is on screen, and the analyst
+is asked the same question about each. The Alerts panel follows the Today steps: empty at step 1,
+the next-morning discovery at step 2, and a scripted "Blocked on a stale number" for 7405 added
+at step 3.
+
+In Today mode the Pipeline panel is a chart, not a flow (2026-11-12): one blocked bar per system,
+as long as its extract is old, on a log scale, with a rule at the stalest and the `nightly_copy`
+plate against it. The lanes shader is drawn only in Streamhouse mode.
+
+The spotlight is a gesture (2026-11-12): on arriving at a step the panels it is about take a
+bright edge and the rest dim for 4.5 seconds, then the whole desk comes back up. Escape, or the
+rail's Spotlight button, lifts it early or gives it again.
+
 Before the room: `scripts/verify.sh --quick`, then press **Reset** and wait for 4417 to read
 81%. Reset also offsets any rehearsal fills; nothing needs rebuilding.
 
