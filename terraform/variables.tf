@@ -4,18 +4,18 @@ variable "prefix" {
   default     = "streamhouse-cm"
 }
 
-# The environment and cluster already existed, created by hand. Terraform reads them
-# rather than owning them, so a destroy never takes the cluster with it.
+# The environment and cluster are made by hand. Terraform reads them
+# rather than owning them, so a destroy never takes the cluster with it. No defaults: the
+# ids come from TF_VAR_environment_id and TF_VAR_cluster_id in .env, and a plan run without
+# them fails rather than reaching for another account's.
 variable "environment_id" {
-  description = "The pre-existing Capital-Markets environment."
+  description = "The Capital-Markets environment."
   type        = string
-  default     = "env-53k1pn"
 }
 
 variable "cluster_id" {
-  description = "The pre-existing brokerage_0 cluster. Standard, AWS, us-east-1."
+  description = "The brokerage_0 cluster. Standard, AWS, us-east-1."
   type        = string
-  default     = "lkc-v7wpq15"
 }
 
 variable "region" {
