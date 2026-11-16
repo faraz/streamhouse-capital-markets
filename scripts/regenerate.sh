@@ -19,6 +19,8 @@ WITH_GEN=1
 
 FLAGS_SQL=(--compute-pool "$DEMO_FLINK_POOL_ID" --database "$DEMO_CLUSTER_ID" --environment "$DEMO_ENVIRONMENT_ID")
 FLAGS_ENV=(--cloud aws --region us-east-1 --environment "$DEMO_ENVIRONMENT_ID")
+# Named on every topic command rather than left to whichever cluster the CLI last used.
+FLAGS_KAFKA=(--cluster "$DEMO_CLUSTER_ID" --environment "$DEMO_ENVIRONMENT_ID")
 STAMP=$(date +%H%M%S)
 
 say() { printf '\n== %s\n' "$1"; }
@@ -72,7 +74,7 @@ submit() {
 CONTINUOUS=13
 capacity_check() {
   local pool max cur
-  pool=$(confluent flink compute-pool describe "$DEMO_FLINK_POOL_ID" -o json)
+  pool=$(confluent flink compute-pool describe "$DEMO_FLINK_POOL_ID" --environment "$DEMO_ENVIRONMENT_ID" -o json)
   max=$(printf '%s' "$pool" | jq -r '.max_cfu')
   # The CLI spells the field with three r's; accept the corrected spelling too.
   cur=$(printf '%s' "$pool" | jq -r '.currrent_cfu // .current_cfu // 0')
@@ -91,7 +93,7 @@ capacity_check
 
 say "raw topics"
 for t in raw_mq_intraday raw_venue raw_desk_sheet raw_custodial raw_clearing raw_book_of_record raw_events raw_trades; do
-  confluent kafka topic create "$t" --partitions 1 >/dev/null 2>&1 && echo "  created $t" || echo "  $t already there"
+  confluent kafka topic create "$t" --partitions 1 "${FLAGS_KAFKA[@]}" >/dev/null 2>&1 && echo "  created $t" || echo "  $t already there"
 done
 
 sleep 12
@@ -112,7 +114,7 @@ say "schemas on the raw topics"
 produce() {
   local attempt
   for attempt in 1 2 3 4 5 6; do
-    if printf '%s\n' "$3" | confluent kafka topic produce "$1" --value-format avro --schema "$2" \
+    if printf '%s\n' "$3" | confluent kafka topic produce "$1" "${FLAGS_KAFKA[@]}" --value-format avro --schema "$2" \
          --api-key "$CONFLUENT_KAFKA_KEY" --api-secret "$CONFLUENT_KAFKA_SECRET" \
          --schema-registry-api-key "$CONFLUENT_SR_KEY" --schema-registry-api-secret "$CONFLUENT_SR_SECRET" >/dev/null 2>&1; then
       echo "  seeded $1"
@@ -138,8 +140,16 @@ SID=$(curl -s -u "$CONFLUENT_SR_KEY:$CONFLUENT_SR_SECRET" \
   -H "Content-Type: application/vnd.schemaregistry.v1+json" \
   -d "$(jq -c -n --arg s "$SCHEMA" '{schemaType:"JSON", schema:$s}')" | jq -r '.id // empty')
 if [ -n "$SID" ]; then
-  sed -i '' "s/^RAW_EVENTS_SCHEMA_ID=.*/RAW_EVENTS_SCHEMA_ID=$SID/" .env 2>/dev/null \
-    || echo "RAW_EVENTS_SCHEMA_ID=$SID" >> .env
+  # Both files, and appended where the line is missing: a new account's registry hands out a
+  # different id, and sed alone succeeds without writing anything when there is no line yet.
+  for f in .env .dev.vars; do
+    [ -f "$f" ] || continue
+    if grep -q '^RAW_EVENTS_SCHEMA_ID=' "$f"; then
+      sed -i '' "s/^RAW_EVENTS_SCHEMA_ID=.*/RAW_EVENTS_SCHEMA_ID=$SID/" "$f"
+    else
+      echo "RAW_EVENTS_SCHEMA_ID=$SID" >> "$f"
+    fi
+  done
   echo "  schema id $SID"
 else
   echo "  WARNING: could not register the events schema" >&2

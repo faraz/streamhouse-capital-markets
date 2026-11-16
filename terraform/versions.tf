@@ -13,5 +13,5 @@ terraform {
 provider "confluent" {
   # From CONFLUENT_CLOUD_API_KEY / CONFLUENT_CLOUD_API_SECRET in the environment.
   # A Cloud API key manages resources; querying a Lightning Table needs a Global key,
-  # which the provider cannot mint. See scripts/global-key.sh.
+  # which the provider cannot mint: confluent api-key create --resource global.
 }

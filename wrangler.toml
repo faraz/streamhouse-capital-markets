@@ -1,6 +1,9 @@
 name = "streamhouse-capital-markets"
 main = "worker/index.ts"
 compatibility_date = "2026-10-01"
+# The Fia5005 account, where the Worker lives. Named because the login reaches two accounts
+# and wrangler will not choose between them without a terminal.
+account_id = "cdf35c8c80b812edd0a2698e9d3a5614"
 
 # The built SPA is served by the Worker, so one deploy covers the screen and its API.
 [assets]

@@ -76,7 +76,7 @@ resource "confluent_role_binding" "reader_subject_read" {
 
 # --- keys --------------------------------------------------------------------------
 # Note what is missing: querying a Lightning Table needs a *Global* API key, and the
-# provider cannot express that scope. One CLI line mints it. See scripts/global-key.sh.
+# provider cannot express that scope. One CLI line mints it: confluent api-key create --resource global.
 
 resource "confluent_api_key" "manager_kafka" {
   display_name = "${var.prefix}-manager-kafka"

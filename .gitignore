@@ -25,3 +25,6 @@ dist/
 
 # Local Worker secrets
 .dev.vars
+
+# Moved aside by scripts/bootstrap.sh when the account changes
+.dev.vars.*

@@ -3,9 +3,10 @@
 #
 # Requires `npx wrangler login` once, which opens a browser.
 #
-# Nothing here is a security boundary except the reader credential's scope: the gate
-# value ends up in the client bundle, so it stops drive-by traffic and nothing more. The
-# control that matters is that the key the Worker holds can only READ two topics.
+# Nothing here is a security boundary: the gate value ends up in the client bundle, so it
+# stops drive-by traffic and nothing more. In the first account the control that mattered
+# was that the Worker's key could only read. In the shared one the Worker holds the
+# environment admin's keys (docs/new-account.md), and the only bound is that environment.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 PATH="/opt/homebrew/bin:$PATH"
@@ -16,7 +17,7 @@ if ! npx wrangler whoami 2>&1 | grep -qi 'account'; then
   exit 1
 fi
 
-: "${DEMO_GATE_PROD:?set DEMO_GATE_PROD in .env first (scripts/deploy.sh generates one if missing)}"
+: "${DEMO_GATE_PROD:?set DEMO_GATE_PROD in .env first (scripts/bootstrap.sh generates one if missing)}"
 
 echo "== build"
 VITE_DEMO_GATE="$DEMO_GATE_PROD" npx vite build

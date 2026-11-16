@@ -21,6 +21,9 @@ set -a; . ./.env; set +a
 
 FLAGS_ENV=(--cloud aws --region us-east-1 --environment "$DEMO_ENVIRONMENT_ID")
 FLAGS_SQL=(--compute-pool "$DEMO_FLINK_POOL_ID" --database "$DEMO_CLUSTER_ID" --environment "$DEMO_ENVIRONMENT_ID")
+# Named on every topic command rather than left to whichever cluster the CLI last used: the
+# account is shared, and the sweep below deletes every topic on the cluster it is pointed at.
+FLAGS_KAFKA=(--cluster "$DEMO_CLUSTER_ID" --environment "$DEMO_ENVIRONMENT_ID")
 say() { printf '\n== %s\n' "$1"; }
 
 confluent environment use "$DEMO_ENVIRONMENT_ID" >/dev/null 2>&1
@@ -59,9 +62,9 @@ for t in $(confluent flink materialized-table list "${FLAGS_ENV[@]}" -o json 2>/
 done
 
 say "topics"
-for t in $(confluent kafka topic list -o json 2>/dev/null \
+for t in $(confluent kafka topic list "${FLAGS_KAFKA[@]}" -o json 2>/dev/null \
            | jq -r '.[]|select(.name|startswith("_")|not)|.name'); do
-  confluent kafka topic delete "$t" --force >/dev/null 2>&1 && echo "  deleted $t" || echo "  could not delete $t"
+  confluent kafka topic delete "$t" "${FLAGS_KAFKA[@]}" --force >/dev/null 2>&1 && echo "  deleted $t" || echo "  could not delete $t"
 done
 
 say "the risk agent"
@@ -81,7 +84,8 @@ printf '  connectors: %s\n' "$(confluent connect cluster list --environment "$DE
 printf '  statements: %s\n' "$(confluent flink statement list "${FLAGS_ENV[@]}" -o json 2>/dev/null | jq -r '[.[]|select(.status=="RUNNING")]|length')"
 printf '  materialized tables: %s\n' "$(confluent flink materialized-table list "${FLAGS_ENV[@]}" -o json 2>/dev/null | jq -r 'length')"
 printf '  lightning tables: %s\n' "$(confluent rtce rtce-topic list --environment "$DEMO_ENVIRONMENT_ID" --cluster "$DEMO_CLUSTER_ID" -o json 2>/dev/null | jq -r 'length')"
-printf '  topics: %s\n' "$(confluent kafka topic list -o json 2>/dev/null | jq -r '[.[]|select(.name|startswith("_")|not)]|length')"
+printf '  topics: %s\n' "$(confluent kafka topic list "${FLAGS_KAFKA[@]}" -o json 2>/dev/null | jq -r '[.[]|select(.name|startswith("_")|not)]|length')"
 echo
 echo "  The cluster, environment, service accounts, keys and Flink pool are untouched."
-echo "  A cluster at zero consumption bills nothing. Rebuild with scripts/regenerate.sh."
+echo "  The Standard cluster still bills about \$18 a day with nothing in it; only deleting it"
+echo "  stops that. Rebuild with scripts/regenerate.sh."
