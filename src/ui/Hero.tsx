@@ -16,7 +16,7 @@ const EASE = [0.16, 1, 0.3, 1] as const;
 const ACROSS = ['desks', 'venues', 'custodians', 'entities', 'everything'];
 
 /** The talk this desk is the middle act of. */
-const SLIDES_URL = 'https://faraz.github.io/talks/s/streamhouse-sellers?play=1&p=1';
+const SLIDES_URL = 'https://talks.fia5005.workers.dev/s/streamhouse-sellers?play=1&p=1';
 
 /**
  * The first thing the room sees, before the desk. Behind it, a dot matrix lit by six

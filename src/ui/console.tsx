@@ -9,7 +9,7 @@ import { PALETTE } from './format';
  * line, or from Flink management in the console, and set it here. Everything else in a
  * console address is the object's own name.
  */
-export const STATEMENT_STAMP = '123424';
+export const STATEMENT_STAMP = '232724';
 const statementName = (label: string) => `cm-${label}-${STATEMENT_STAMP}`;
 
 /**

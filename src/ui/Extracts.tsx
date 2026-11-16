@@ -5,6 +5,8 @@ import { TICKS, at } from './AgeRuler';
 import { PALETTE, age } from './format';
 
 const EASE = [0.16, 1, 0.3, 1] as const;
+/** The bars wait this long before drawing, so the hero has lifted and the eye has arrived. */
+const STARTS_S = 0.45;
 
 export interface Extract {
   id: string;
@@ -24,7 +26,7 @@ export interface Extract {
  */
 export function Extracts({ rows, copyMs }: { rows: Extract[]; copyMs: number }) {
   const worst = rows.reduce((a, b) => (b.ms > a.ms ? b : a), rows[0]!);
-  const settled = 0.15 + rows.length * 0.07 + 0.7;
+  const settled = STARTS_S + rows.length * 0.07 + 0.7;
   return (
     <div className="ext" role="img" aria-label={`Six extracts, the stalest ${age(worst.ms)} old; the nightly copy is ${age(copyMs)} old`}>
       <div className="ext-plot">
@@ -52,7 +54,7 @@ export function Extracts({ rows, copyMs }: { rows: Extract[]; copyMs: number }) 
                 style={{ width: `${Math.max(1.4, at(r.ms))}%` }}
                 initial={{ clipPath: 'inset(0 100% 0 0)' }}
                 animate={{ clipPath: 'inset(0 0% 0 0)' }}
-                transition={{ duration: 0.8, delay: 0.15 + i * 0.07, ease: EASE }}
+                transition={{ duration: 0.8, delay: STARTS_S + i * 0.07, ease: EASE }}
               />
             </div>
           ))}

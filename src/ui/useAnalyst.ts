@@ -8,6 +8,12 @@ export interface Step {
   meta?: string;
   code?: string;
   body?: string;
+  /** A query in one line: what it returned, for where the query itself is folded away. */
+  summary?: string;
+  /** Set on an answer read from the nightly copy: how old that copy is, in words. */
+  stale?: string;
+  /** Set on the correction to such an answer: what the copy said and what was true, as shares of the limit. */
+  figures?: { said: number; was: number };
 }
 
 export const questionsFor = (client: string) => [
@@ -36,6 +42,7 @@ function beforeSteps(s: DeskSnapshot): Step[] {
       tag: 'Tool call',
       meta: 'nightly_copy',
       code: `SELECT client_id, exposure_usd, limit_usd, as_of\nFROM nightly_copy\nWHERE client_id = '${clientId}'`,
+      summary: `client ${clientId} / 1 row / as of ${age(s.clocks.servedAgeMs)} ago`,
     },
     {
       kind: 'result',
@@ -47,12 +54,14 @@ function beforeSteps(s: DeskSnapshot): Step[] {
       kind: 'answer',
       tag: 'Answer',
       meta: `the number is ${age(s.clocks.servedAgeMs)} old`,
+      stale: age(s.clocks.servedAgeMs),
       body: `Client ${clientId} is at ${limitUtilPct.toFixed(1)}% of its limit, with $${money(limitUsd - exposureUsd)} of headroom. ${limitUtilPct >= 95 ? 'New trades should be refused.' : 'No action needed.'}`,
     },
     {
       kind: 'error',
       tag: 'What was true',
       meta: 'read live from Confluent',
+      figures: { said: limitUtilPct, was: truePct },
       body: readHigh
         ? `Exposure was actually $${money(s.trueExposureUsd)}, or ${truePct.toFixed(1)}% of the limit: ${(limitUtilPct - truePct).toFixed(0)} points less than the copy said. A good trade would have been refused.`
         : `Exposure was actually $${money(s.trueExposureUsd)}, or ${truePct.toFixed(1)}% of the limit: ${(truePct - limitUtilPct).toFixed(0)} points more than the copy said. The analyst answered from last night's file, and nobody was told.`,

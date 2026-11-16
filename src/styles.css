@@ -2318,3 +2318,109 @@ kbd {
   .flow-serve { transform: translate(0, 42px); }
 }
 .flow-note { top: 5px; line-height: 1.3; }
+
+/* ============ The story's two clients ============ */
+/* Wherever clients are listed, 4417 and 7405 are the ones the room has to find: their ids
+   are set as tags, filled for the one on screen and outlined for the other, and each has a
+   name flag on the limit ladder. Neutral white: a client's colour is still its limit used. */
+.book-id {
+  display: inline-block;
+  margin-left: -6px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 400;
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px rgba(231, 234, 238, 0.6);
+}
+.tr[data-selected="true"] .book-id { background: var(--text); color: var(--ground); box-shadow: none; }
+.book-table .tr[data-story="true"]:not([data-selected="true"]) { background: color-mix(in srgb, var(--raised) 50%, transparent); }
+.ladder-mark[data-story="true"] { fill: var(--text); stroke: var(--text); stroke-width: 2; paint-order: stroke; }
+.ladder-flag line { stroke: var(--text); stroke-opacity: 0.7; }
+.ladder-flag rect { fill: var(--panel); stroke: rgba(231, 234, 238, 0.6); }
+.ladder-flag text { font-family: var(--num); font-size: 11px; fill: var(--text); }
+.ladder-flag[data-focus="true"] rect { fill: var(--text); stroke: var(--text); }
+.ladder-flag[data-focus="true"] text { fill: var(--ground); }
+/* The tag reaches a little into the row's margin so its digits stay in line with the other ids. */
+.book-table .tr[data-story="true"] > span:first-child { overflow: visible; }
+
+/* ============ The analyst's conversation ============ */
+/* A question and everything done to answer it are one unit down a thin rail. Red is spent
+   once per answer, on the answer that came from the copy; what was true wears the colour of
+   a live figure. Small red text uses a lighter tint, so it reads on a projector; bars, dots
+   and rules keep the full red. */
+:root { --stale-text: #FF8589; }
+[data-tone="stale"] { color: var(--stale-text); }
+.stamp[data-tone="stale"], .source[data-stalest="true"] .source-name, .ext-tag, .ext-as, .ext-rule em, .cmp-mark[data-world="copy"] em { color: var(--stale-text); }
+.hist-val[data-world="copy"], .hist-val[data-tone="stale"] { fill: var(--stale-text); }
+.alert[data-tone="bad"][data-author="scripted"] { background: rgba(242, 85, 90, 0.035); border-color: rgba(242, 85, 90, 0.38); }
+
+.tape-wrap { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.analyst .tape { gap: 16px; }
+/* The conversation sits at the foot of the panel, beside the box it is typed into. */
+.analyst .tape > :first-child { margin-top: auto; }
+
+.xchg { display: grid; gap: 8px; min-width: 0; }
+.xchg + .xchg { padding-top: 16px; border-top: 1px solid var(--line-soft); }
+.xchg-ask { display: flex; justify-content: flex-end; }
+.xchg-moves { list-style: none; margin: 0 0 0 4px; padding: 2px 0 2px 16px; display: grid; gap: 10px; border-left: 1px solid var(--line); min-width: 0; }
+.move { position: relative; min-width: 0; }
+.move::before { content: ""; position: absolute; left: -20.5px; top: 8px; width: 8px; height: 8px; border-radius: 50%; background: var(--panel); box-shadow: inset 0 0 0 1.5px var(--dim); }
+.move[data-kind="query"]::before { box-shadow: inset 0 0 0 1.5px var(--agent); }
+.move[data-kind="answer"]::before { background: var(--text); box-shadow: 0 0 0 3px var(--panel); }
+.move[data-kind="answer"][data-stale="true"]::before, .move[data-kind="error"]::before { background: var(--stale); box-shadow: 0 0 0 3px var(--panel); }
+.move[data-kind="truth"]::before { background: var(--fresh); box-shadow: 0 0 0 3px var(--panel); top: 12px; }
+
+/* A query: one line against the copy, an open ledger against the streamhouse. */
+.q { min-width: 0; }
+.q-line { width: 100%; display: flex; align-items: baseline; gap: 10px; min-width: 0; padding: 5px 9px; border-radius: 6px; border: 1px solid var(--line); background: var(--ground); text-align: left; transition: border-color 150ms var(--ease); }
+.q-name { flex-shrink: 0; font-family: var(--mono); font-size: 11px; color: var(--agent); }
+.q-sum { flex: 1; min-width: 0; font-size: 11.5px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.q-caret { flex-shrink: 0; align-self: center; color: var(--dim); transition: transform 160ms var(--ease); }
+.q-line[aria-expanded="true"] .q-caret { transform: rotate(180deg); }
+.q-line:active { transform: scale(0.99); }
+.q-body { display: grid; gap: 6px; margin-top: 4px; padding: 8px 10px; border-radius: 6px; background: var(--ground); border: 1px solid var(--line-soft); }
+.q-returned { color: var(--dim); }
+.q--open { display: grid; gap: 5px; padding: 7px 10px; border-radius: 6px; background: var(--ground); border: 1px solid var(--line); }
+.q--open .q-returned { padding-top: 5px; border-top: 1px solid var(--line-soft); white-space: pre; overflow: hidden; mask-image: linear-gradient(90deg, #000 85%, transparent); }
+@media (hover: hover) and (pointer: fine) {
+  .q-line:hover { border-color: #2E3540; }
+  .q-line:hover .q-caret { color: var(--text); }
+}
+
+.answer { display: grid; gap: 4px; }
+.answer-from { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 500; color: var(--stale-text); }
+.answer-from i { width: 6px; height: 6px; border-radius: 50%; background: var(--stale); flex-shrink: 0; }
+.answer-from .num { font-size: 11px; color: inherit; }
+.answer-meta { color: var(--dim); }
+
+.truth { display: grid; gap: 6px; padding: 9px 12px; border-radius: 7px; border: 1px solid rgba(61, 214, 140, 0.38); background: color-mix(in srgb, var(--fresh) 4%, var(--ground)); }
+.truth-tag { font-size: 11px; font-weight: 600; color: var(--fresh); }
+.truth-row { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; font-size: 12px; color: var(--dim); }
+.truth-row svg { align-self: center; flex-shrink: 0; color: var(--dim); }
+.truth-row b { font-weight: 400; }
+.truth-said b, .truth-was b { font-size: 16.5px; }
+.truth-said b { color: var(--stale-text); }
+.truth-was b { color: var(--fresh); }
+.truth-gap { margin-left: auto; font-weight: 500; color: var(--text); white-space: nowrap; }
+.truth p { font-size: 12.5px; line-height: 1.5; color: #C3C9D1; text-wrap: pretty; }
+
+/* A real failure is still red, more quietly filled. */
+.correction { background: rgba(242, 85, 90, 0.04); border-color: rgba(242, 85, 90, 0.38); }
+.correction-tag { color: var(--stale-text); }
+
+/* Two exchanges in the panel at once. */
+.analyst--pair .tape { gap: 10px; padding-top: 2px; }
+.analyst--pair .xchg + .xchg { padding-top: 10px; }
+.analyst--pair .xchg-moves { gap: 7px; }
+.analyst--pair .ask-bubble { font-size: 12.5px; padding: 6px 10px; }
+.analyst--pair .answer-text { font-size: 13px; line-height: 1.45; }
+.analyst--pair .truth { padding: 7px 10px; gap: 4px; }
+@media (max-height: 1000px) and (min-width: 901px) {
+  /* The query line and the answer both name the client, so the question's own bubble gives up
+     its lines, and the figures stand in for the sentence the cards beside them already say. */
+  .analyst--pair .xchg-ask, .analyst--pair .truth p { display: none; }
+}
+@media (max-height: 900px) and (min-width: 901px) {
+  .analyst--pair .tape { gap: 8px; padding-bottom: 10px; }
+  .analyst--pair .answer-text { font-size: 12.5px; line-height: 1.4; }
+}

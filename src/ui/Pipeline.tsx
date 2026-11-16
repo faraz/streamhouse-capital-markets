@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import type { DeskSnapshot } from '../data/types';
 import { age, baseTime, freshness, tableAsOf } from './format';
@@ -133,6 +133,11 @@ export function Pipeline({
     return () => window.clearTimeout(done);
   }, [onStage, quiet, tour.index]);
 
+  // Today's chart draws itself each time the room arrives at a step that is about this panel,
+  // and holds still through the steps that are not.
+  const drawn = useRef(tour.arrivals);
+  if (tour.beat.lit.includes('pipeline')) drawn.current = tour.arrivals;
+
   const follow = (row: Row) => {
     if (!row.traceable || !onTraceSource) return;
     setBeads((b) => ({ ...b, [row.id]: Date.now() }));
@@ -247,7 +252,7 @@ export function Pipeline({
           // Today nothing flows, so nothing is drawn flowing: six extracts, each as old as it
           // is, and the one copy made from them.
           <div className="flow-stage flow-stage--today">
-            <Extracts rows={rows.map((r) => ({ id: r.id, name: r.name, ms: r.ms, tone: r.tone, stalest: r.stalest }))} copyMs={answerMs} />
+            <Extracts key={drawn.current} rows={rows.map((r) => ({ id: r.id, name: r.name, ms: r.ms, tone: r.tone, stalest: r.stalest }))} copyMs={answerMs} />
           </div>
         )}
       </div>

@@ -143,12 +143,13 @@ export default function App() {
   // The hero sits over the desk, which is already polling underneath, so the room never
   // watches the desk load. Starting a run over brings the hero back.
   const [entered, setEntered] = useState(false);
-  const { point } = tour;
-  // The first step's spotlight ran out behind the hero, so it is given again as the desk appears.
+  const { arrive } = tour;
+  // The first step arrived behind the hero, so it arrives again as the desk appears: its
+  // spotlight, and whatever its panels draw on arrival.
   const enter = useCallback(() => {
     setEntered(true);
-    point();
-  }, [point]);
+    arrive();
+  }, [arrive]);
   const rewind = useCallback(() => {
     tour.rewind();
     setEntered(false);

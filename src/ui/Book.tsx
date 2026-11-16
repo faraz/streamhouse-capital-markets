@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { motion } from 'motion/react';
+import { STORY_CLIENTS } from '../data/book';
 import type { DeskSnapshot } from '../data/types';
 import { ESCALATE_PCT, age, baseTime } from './format';
 import { LADDER_CLIENTS, Ladder } from './Ladder';
@@ -68,10 +69,14 @@ export function Book({
               className="tr"
               data-selected={c.clientId === focus}
               data-beside={c.clientId === also}
+              data-story={STORY_CLIENTS.includes(c.clientId)}
               onClick={() => onClient(c.clientId)}
               transition={{ layout: { duration: 0.6, ease: EASE } }}
             >
-              <span className="mono">{c.clientId}</span>
+              <span className="mono">
+                {/* The two clients the story is about are tagged, so the eye finds them in the list. */}
+                {STORY_CLIENTS.includes(c.clientId) ? <b className="book-id">{c.clientId}</b> : c.clientId}
+              </span>
               <span className="bar-track">
                 <motion.span
                   className="bar-fill"

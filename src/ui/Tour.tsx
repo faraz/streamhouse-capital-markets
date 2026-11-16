@@ -176,6 +176,14 @@ export function useTour(desk: Desk, analyst: Analyst) {
     window.clearTimeout(pointTimer.current);
     pointTimer.current = window.setTimeout(lift, POINT_MS);
   }, [lift]);
+  // Each time the room arrives somewhere: a step, or the desk itself as the hero lifts. What a
+  // panel draws on arrival is drawn again then, since the first step's arrival happens behind
+  // the hero where nobody sees it.
+  const [arrivals, setArrivals] = useState(0);
+  const arrive = useCallback(() => {
+    setArrivals((n) => n + 1);
+    point();
+  }, [point]);
   // Escape, or the rail's button: lift it now if it is on, point again if it is not.
   const repoint = useCallback(() => (isPointing.current ? lift() : point()), [lift, point]);
   useEffect(() => () => window.clearTimeout(pointTimer.current), []);
@@ -193,7 +201,7 @@ export function useTour(desk: Desk, analyst: Analyst) {
     at.current = i;
     setIndex(i);
     setSpotlight(true);
-    point();
+    arrive();
     deskRef.current.setMode(beat.mode);
     deskRef.current.setClient(beat.client);
     if (i > from && beat.enter && !fired.current.has(beat.id)) {
@@ -201,7 +209,7 @@ export function useTour(desk: Desk, analyst: Analyst) {
       // After the mode lands, so a question is put to the world the beat is in.
       window.setTimeout(() => beat.enter!(deskRef.current, analystRef.current), 60);
     }
-  }, [point]);
+  }, [arrive]);
 
   // The room opens on the first beat, in the before-world, as the run-of-show does.
   useEffect(() => go(0), [go]);
@@ -234,8 +242,10 @@ export function useTour(desk: Desk, analyst: Analyst) {
     spotlight: spotlight && beat.id !== 'desk',
     /** True for the few seconds the spotlight is actually on the step's panels. */
     pointing: spotlight && pointing && beat.id !== 'desk',
-    /** Point at the step's panels again, as when the desk first comes into view. */
-    point,
+    /** How many times the room has arrived at a step or at the desk. */
+    arrivals,
+    /** The desk has just come into view: point at the step's panels and redraw what draws on arrival. */
+    arrive,
     go,
     lit: (id: PanelId) => beat.lit.includes(id),
     /** A new run: the narrative events may fire again. */

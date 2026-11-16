@@ -155,6 +155,12 @@ Each of the six sources has its own colour (`src/ui/sourceColors.ts`), on its ro
 its tab in the trace (2026-11-12). Only the trade feed is producing, so as a Streamhouse step
 arrives the six quiet lanes each replay their newest record once, in turn, and the stage says so.
 
+The analyst's conversation is grouped (2026-11-12): a question and everything done to answer it
+sit on one rail. Against the nightly copy the query is one line with its SQL a click away, the
+answer carries a red "from last night's copy" tag, and what was true is a green box with the two
+figures first. Against the streamhouse the tool calls stay open. Small red text uses a lighter
+tint (`--stale-text`); bars, dots and rules keep the full red.
+
 Before the room: `scripts/verify.sh --quick`, then press **Reset** and wait for 4417 to read
 81%. Reset also offsets any rehearsal fills; nothing needs rebuilding.
 

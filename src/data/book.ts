@@ -20,6 +20,8 @@ export const DECK_CLIENTS: ReadonlyArray<{ id: string; limitUsd: number; exposur
 export const FOLLOWED = '4417';
 /** The mirror case: its stale number reads high, so a good trade gets refused. */
 export const FALSE_BLOCK = '7405';
+/** The two clients the story is told with: wherever a client is listed, these are the ones to find. */
+export const STORY_CLIENTS: readonly string[] = [FOLLOWED, FALSE_BLOCK];
 /** Where the followed client closed the day its copy read low, as a share of its limit: the breach found the next morning. */
 export const BREACH_CLOSE_PCT = 103;
 
